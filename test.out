@@ -1,0 +1,17 @@
+struct Walelo {
+  int whar;
+  fun jeinjo(self) -> Pape {
+    if true {
+      return OOOOOO;
+    } else {
+      if x < 10 != 10 > x {
+        x = (x + 1);
+      }
+    }
+  }
+  fun blelbo(self, tuple (bool, bool) t) -> tuple (int, bool) {
+    x = (1, 2, 3 & 4, true);
+    y = jeinjo(walelo);
+    return (1, true);
+  }
+}

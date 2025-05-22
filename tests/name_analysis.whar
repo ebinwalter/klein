@@ -1,0 +1,15 @@
+struct Point {
+  int x;
+  int y;
+}
+
+struct Rect {
+  struct Point *a;
+  struct Point *b;
+}
+
+fun main(int argc, char **argv) {
+  struct Rect r;
+  struct Point p1;
+  struct Point p2;
+}

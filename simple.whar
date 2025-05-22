@@ -1,0 +1,9 @@
+int[5] arr;
+
+fun main() {
+  int *x = &arr[1];
+  int *y = &arr[2];
+  x = &arr[1];
+  *x = 5;
+  *y = 10;
+}

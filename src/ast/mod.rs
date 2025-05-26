@@ -364,9 +364,20 @@ impl Ast for IdNode {
         self.sym.get().cloned()
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
         if let Symbol::Var(vs) = &**self.sym.get().unwrap() {
-            Some((*vs.ty).clone())
+            let ty = (*vs.ty).clone();
+            
+            // Check if this is a struct type being used in an rvalue position
+            if let TypeNode::Struct(_, _) = ty {
+                tc.raise_error(
+                    Rc::new(self.clone()),
+                    "Struct variables cannot be used directly in expressions. Consider using a reference (&) or accessing a field.".into()
+                );
+                return None;
+            }
+            
+            Some(ty)
         } else {
             tc.raise_error(Rc::new(self.clone()), "Attempted to check the type of a non-variable".into());
             None
@@ -411,6 +422,67 @@ impl Ast for IdNode {
         }
         cg.emit_push(CG::T0);
     }
+}
+
+struct Aligner {
+    next_offset: i32,
+    grow_downward: bool,
+}
+
+impl Aligner {
+    fn new(start: i32) -> Self {
+        Aligner {
+            next_offset: start,
+            grow_downward: false,
+        }
+    }
+    fn new_downward(start: i32) -> Self {
+        Aligner {
+            next_offset: start,
+            grow_downward: true,
+        }
+    }
+    fn place(&mut self, bytes: u32) -> i32 {
+        let alignment = match bytes {
+            0 => unreachable!(),
+            1 => 1,
+            2 => 2,
+            _x => 4
+        };
+        let bytes = bytes as i32;
+        if self.grow_downward {
+            if self.next_offset % alignment != 0 {
+                self.next_offset -= alignment - self.next_offset % alignment;
+            }
+            self.next_offset -= bytes;
+            self.next_offset
+        } else {
+            if self.next_offset % alignment != 0 {
+                self.next_offset += alignment - self.next_offset % alignment;
+            }
+            let old = self.next_offset;
+            self.next_offset += bytes;
+            old
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn aligner_test() {
+    let mut a = Aligner::new(4);
+    assert_eq!(a.place(1), 4);
+    assert_eq!(a.place(1), 5);
+    assert_eq!(a.place(1), 6);
+    assert_eq!(a.place(4), 8);
+    assert_eq!(a.place(4), 12);
+    assert_eq!(a.place(1), 16);
+
+    let mut b = Aligner::new_downward(-8);
+    assert_eq!(b.place(4), -12);
+    assert_eq!(b.place(4), -16);
+    assert_eq!(b.place(2), -18);
+    assert_eq!(b.place(2), -20);
 }
 
 impl Loc for IdNode {}

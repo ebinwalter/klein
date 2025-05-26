@@ -1,6 +1,7 @@
 int[5] arr;
 
 fun main() {
+  char c;
   int *x = &arr[1];
   int *y = &arr[2];
   x = &arr[1];

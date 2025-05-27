@@ -160,7 +160,7 @@ impl Program {
         let mut tc = TypeCheckingContext {
             ref_text: txt,
             err_msgs: Vec::new(),
-            type_cache: HashMap::new(),
+            type_cache: TypeCache::new(),
         };
         self.typecheck(&mut tc);
         for err in tc.err_msgs.iter() {

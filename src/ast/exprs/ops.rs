@@ -117,7 +117,9 @@ impl<T> Ast for T
 
     fn codegen(&self, cg: &mut Codegen) {
         let (lhs, rhs) = self.operands();
-        let lhs_ty = cg.type_cache.get(&RCKey(lhs.clone()))
+        // `&(lhs.clone() as _)` casts the LHS Rc<Expr> to an Rc<Ast>
+        // and takes a reference
+        let lhs_ty = cg.type_cache.get(&(lhs.clone() as _))
             .expect("type should've been cached during type checking for \
                      binary operator")
             .clone();

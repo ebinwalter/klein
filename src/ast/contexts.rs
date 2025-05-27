@@ -162,7 +162,26 @@ impl Hash for RCKey {
     }
 }
 
-pub type TypeCache = HashMap<RCKey, TypeNode>;
+pub struct TypeCache {
+    storage: HashMap<RCKey, TypeNode>,
+}
+
+impl TypeCache {
+    pub fn new() -> Self {
+        Self {
+            storage: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, what: &Rc<dyn Ast + 'static>, ty: &TypeNode) {
+        self.storage.insert(RCKey(what.clone()), ty.clone());
+    }
+
+    pub fn get(&self, what: &Rc<dyn Ast + 'static>) -> Option<&TypeNode> {
+        self.storage.get(&RCKey(what.clone()))
+    }
+}
+
 
 pub struct TypeCheckingContext<'a> {
     pub (super) err_msgs: Vec<String>,
@@ -181,8 +200,8 @@ impl TypeCheckingContext<'_> {
         self.err_msgs.push(m);
     }
 
-    pub fn cache_type(&mut self, what: &Rc<dyn Ast>, ty: &TypeNode) {
-        self.type_cache.insert(RCKey(what.clone()), ty.clone());
+    pub fn cache_type(&mut self, what: &Rc<dyn Ast + 'static>, ty: &TypeNode) {
+        self.type_cache.insert(what, ty);
     }
 }
 

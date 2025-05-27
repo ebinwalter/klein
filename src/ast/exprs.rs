@@ -423,7 +423,7 @@ impl Ast for IndexExpr {
     }
 
     fn codegen_lvalue(&self, cg: &mut Codegen) {
-        let ty = cg.type_cache.get(&RCKey(self.ptr.clone())).unwrap();
+        let ty = cg.type_cache.get(&(self.ptr.clone() as Rc<dyn Ast + 'static>)).unwrap();
         let ty_size = ty.size();
         self.ptr.codegen_lvalue(cg);   
         self.index.codegen(cg);

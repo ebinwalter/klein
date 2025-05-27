@@ -1,10 +1,22 @@
 int[5] arr;
+int final;
+char *init_string;
+char[20] out_string;
 
 fun main() {
-  char c;
+  init_string = "Hello worble";
+  int i = 5;
+  char[7] c;
+  // Problematic part
+  while (i < 20) {
+    out_string[i - 5] = init_string[i];
+    i = i + 1;
+  }
+  // This part works fine
   int *x = &arr[1];
   int *y = &arr[2];
   x = &arr[1];
   *x = 5;
   *y = 10;
+  final = arr[1] + arr[2];
 }

@@ -393,12 +393,17 @@ fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
         match *sym {
             Symbol::Var(ref v) => {
                 let &is_global = v.global.get().unwrap();
+                let load_ins = match v.ty.size() {
+                    1 => "lb",
+                    4 => "lw",
+                    _ => todo!()
+                };
                 if is_global {
                     cg.emit(Comment(&format!("Pushing value of global variable {}", v.id)));
-                    cg.emit(("lw", CG::T0, Label(format!("_{}", v.id))));
+                    cg.emit((load_ins, CG::T0, Label(format!("_{}", v.id))));
                 } else {
                     cg.emit(Comment(&format!("Pushing value of local variable {}", v.id)));
-                    cg.emit(("lw", CG::T0, CG::FP, Ix(*v.offset.get().unwrap())));
+                    cg.emit((load_ins, CG::T0, CG::FP, Ix(*v.offset.get().unwrap())));
                 }
                 cg.emit_push(CG::T0);
             },

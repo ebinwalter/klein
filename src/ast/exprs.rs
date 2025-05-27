@@ -121,6 +121,13 @@ impl Ast for AssignExpr {
     fn codegen(&self, cg: &mut Codegen) {
         self.loc.codegen_lvalue(cg);
         self.value.codegen(cg);
+        // Adjust instruction for storing a value based
+        // on the expression's size
+        let store_ins = match self.ty.get().unwrap().size() {
+            1 => "sb",
+            4 => "sw",
+            _ => todo!()
+        };
         // Recall cached value from `typecheck`
         // T1 holds value
         cg.emit(Comment("Popping rvalue for assignment"));
@@ -128,7 +135,7 @@ impl Ast for AssignExpr {
         // T0 holds location
         cg.emit(Comment("Popping lvalue for assignment"));
         cg.emit_pop(CG::T0);
-        cg.emit(("sw", CG::T1, CG::T0, Ix(0)));
+        cg.emit((store_ins, CG::T1, CG::T0, Ix(0)));
         cg.emit(Comment("Putting value back on stack (for chains)"));
         cg.emit_push(CG::T1);
     }
@@ -440,9 +447,16 @@ impl Ast for IndexExpr {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
+        let ty = cg.type_cache.get(&(self.ptr.clone() as Rc<dyn Ast + 'static>)).unwrap();
+        let ty_size = ty.size();
+        let load_ins = match ty_size {
+            1 => "lb",
+            4 => "lw",
+            _ => todo!()
+        };
         self.codegen_lvalue(cg);
         cg.emit_pop(CG::T0);
-        cg.emit(("lw", CG::T1, CG::T0, Ix(0)));
+        cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
         cg.emit_push(CG::T1);
     }
 }

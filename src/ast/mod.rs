@@ -174,7 +174,7 @@ impl Program {
     }
 
     pub fn compute_offsets(&self) {
-        let mut ctx = OffsetsContext { offset: 0, offset_stack: Vec::new() };
+        let mut ctx = OffsetsContext::new(0);
         self.compute_var_offsets(&mut ctx);
     }
 
@@ -427,19 +427,22 @@ fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
 struct Aligner {
     next_offset: i32,
     grow_downward: bool,
+    min_alignment: i32
 }
 
 impl Aligner {
-    fn new(start: i32) -> Self {
+    fn new(start: i32, min_alignment: i32) -> Self {
         Aligner {
             next_offset: start,
             grow_downward: false,
+            min_alignment
         }
     }
-    fn new_downward(start: i32) -> Self {
+    fn new_downward(start: i32, min_alignment: i32) -> Self {
         Aligner {
             next_offset: start,
             grow_downward: true,
+            min_alignment
         }
     }
     fn place(&mut self, bytes: u32) -> i32 {
@@ -448,14 +451,15 @@ impl Aligner {
             1 => 1,
             2 => 2,
             _x => 4
-        };
+        }.max(self.min_alignment);
         let bytes = bytes as i32;
         if self.grow_downward {
             if self.next_offset % alignment != 0 {
-                self.next_offset -= alignment - self.next_offset % alignment;
+                self.next_offset -= alignment + self.next_offset % alignment;
             }
+            let old = self.next_offset;
             self.next_offset -= bytes;
-            self.next_offset
+            old
         } else {
             if self.next_offset % alignment != 0 {
                 self.next_offset += alignment - self.next_offset % alignment;
@@ -470,7 +474,7 @@ impl Aligner {
 #[cfg(test)]
 #[test]
 fn aligner_test() {
-    let mut a = Aligner::new(4);
+    let mut a = Aligner::new(4, 1);
     assert_eq!(a.place(1), 4);
     assert_eq!(a.place(1), 5);
     assert_eq!(a.place(1), 6);
@@ -478,11 +482,15 @@ fn aligner_test() {
     assert_eq!(a.place(4), 12);
     assert_eq!(a.place(1), 16);
 
-    let mut b = Aligner::new_downward(-8);
+    let mut b = Aligner::new_downward(-8, 1);
+    assert_eq!(b.place(4), -8);
     assert_eq!(b.place(4), -12);
-    assert_eq!(b.place(4), -16);
+    assert_eq!(b.place(2), -16);
     assert_eq!(b.place(2), -18);
-    assert_eq!(b.place(2), -20);
+    assert_eq!(b.place(1), -20);
+    assert_eq!(b.place(1), -21);
+    assert_eq!(b.place(2), -22);
+    assert_eq!(b.place(3), -24);
 }
 
 impl Loc for IdNode {}

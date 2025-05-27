@@ -209,18 +209,18 @@ impl Ast for FunDecl {
             scope: layer,
         });
         na.define_or_err(&self.id, Symbol::Func(my_fun_sym.clone()));
-        let mut formal_offset = 4;
+        let mut formal_aligner = Aligner::new(4, 4);
         for formal in self.formals.list.iter() {
             formal.ty.analyze_names(na);
             let formal_name = span_to_str(formal.id.span, na.ref_text);
             let formal_sym = VarSymbol {
                 id: formal_name.to_owned(),
                 ty: Rc::new(formal.ty.clone()),
-                offset: OnceCell::from(formal_offset),
+                offset: OnceCell::from(formal_aligner.place(formal.ty.size())),
                 global: OnceCell::new()
             };
             na.define_or_err(&formal.id, Symbol::Var(Rc::new(formal_sym)));
-            formal_offset += 4;
+
         }
         if let Some(ref body) = self.body {
             for item in body.get_list().iter() {

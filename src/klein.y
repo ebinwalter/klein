@@ -4,11 +4,11 @@
 %left '||' '&&'
 %nonassoc 'EQ' 'NEQ'
 %nonassoc 'LT' 'GT' 'LTE' 'GTE'
-%left '[' ']'
 %left '|'
 %right '&'
 %left '+' '-'
 %left '%'
+%left '[' ']'
 %left '*' '/'
 %left '.'
 

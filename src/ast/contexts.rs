@@ -188,30 +188,37 @@ impl TypeCheckingContext<'_> {
 
 pub struct OffsetsContext {
     pub(super) offset_stack: Vec<i32>,
-    pub(super) offset: i32
+    aligner: Aligner,
 }
 
 impl OffsetsContext {
+    pub fn new(offset: i32) -> Self {
+        OffsetsContext {
+            offset_stack: Vec::new(),
+            aligner: Aligner::new_downward(offset, 1),
+        }
+    }
     pub fn start_frame(&mut self) {
-        self.offset_stack.push(self.offset);
-        self.offset = -8;
+        self.offset_stack.push(self.aligner.next_offset);
+        self.aligner.next_offset = -8;
     }
     pub fn push_var(&mut self, size: u32) -> i32 {
-        let old = self.offset;
-        self.offset -= size as i32;
-        old
+        self.aligner.place(size)
     }
     pub fn start_scope(&mut self) {
-        self.offset_stack.push(self.offset);
+        self.offset_stack.push(self.aligner.next_offset);
     }
+    /// Ends a scope created by `start_scope`.  Returns the value we can
+    /// add to the stack pointer to discard the scope's variables.
     pub fn end_scope(&mut self) -> u32 {
-        let out = self.offset;
-        self.offset = self.offset_stack.pop().unwrap();
-        (self.offset-out).try_into().unwrap()
+        let out = self.aligner.next_offset;
+        self.aligner.next_offset = self.offset_stack.pop().unwrap();
+        (self.aligner.next_offset-out).try_into().unwrap()
     }
+    /// Ends a frame created by `start_frame`.
     pub fn end_frame(&mut self) -> u32 {
-        let out = self.offset;
-        self.offset = self.offset_stack.pop().unwrap();
+        let out = self.aligner.next_offset;
+        self.aligner.next_offset = self.offset_stack.pop().unwrap();
         (-out).try_into().unwrap()
     }
 }

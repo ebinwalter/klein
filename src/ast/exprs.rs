@@ -85,6 +85,7 @@ impl Expr for BoolLit {}
 pub struct AssignExpr {
     pub loc: BoxLoc,
     pub value: Boxpr,
+    pub ty: OnceCell<TypeNode>
 }
 
 impl Ast for AssignExpr {
@@ -102,6 +103,8 @@ impl Ast for AssignExpr {
     fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
         let lhs_ty = self.loc.typecheck(tc)?;
         let rhs_ty = self.value.typecheck(tc)?;
+        tc.cache_type(&(self.loc.clone() as _), &lhs_ty);
+        self.ty.set(lhs_ty.clone());
         if rhs_ty.is_subtype_of(&lhs_ty) {
             Some(rhs_ty)
         } else {
@@ -118,6 +121,7 @@ impl Ast for AssignExpr {
     fn codegen(&self, cg: &mut Codegen) {
         self.loc.codegen_lvalue(cg);
         self.value.codegen(cg);
+        // Recall cached value from `typecheck`
         // T1 holds value
         cg.emit(Comment("Popping rvalue for assignment"));
         cg.emit_pop(CG::T1);

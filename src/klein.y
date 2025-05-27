@@ -237,7 +237,7 @@ Loc -> Result<BoxLoc, ()>
   ;
 
 AssignExpr -> Result<AssignExpr, ()>
-  : Loc '=' Expr { Ok(AssignExpr { loc: $1?, value: $3?}) }
+  : Loc '=' Expr { Ok(AssignExpr { loc: $1?, value: $3?, ty: OnceCell::new()}) }
   ;
 
 IntLit -> Result<IntLit, ()>

@@ -79,7 +79,8 @@ impl Decl for VarDecl {
             };
             let assignment = AssignExpr {
                 loc: Rc::new(self.id.clone()),
-                value: init.clone()
+                value: init.clone(),
+                ty: OnceCell::from(self.ty.clone())
             };
             let stmt = ExprStmt { expr: Rc::new(assignment) };
             Some((Rc::new(decl), Rc::new(stmt)))

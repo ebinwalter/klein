@@ -195,7 +195,7 @@ impl Emittable for Directive {
     fn emit(&self) -> String {
         match self {
             Self::Data => ".data\n".into(),
-            Self::Asciiz(s) => format!(".asciiz {}\n", s),
+            Self::Asciiz(s) => format!(".data\n.asciiz {}\n", s),
             Self::Text => ".text\n".into(),
             Self::Space(size) => format!(".space {size}\n")
         }

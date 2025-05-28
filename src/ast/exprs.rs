@@ -119,8 +119,11 @@ impl Ast for AssignExpr {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
+        cg.emit(Comment("Generating lvalue for assignment"));
         self.loc.codegen_lvalue(cg);
+        cg.emit(Comment("Generating rvalue for assignment"));
         self.value.codegen(cg);
+<<<<<<< HEAD
         // Adjust instruction for storing a value based
         // on the expression's size
         let store_ins = match self.ty.get().unwrap().size() {
@@ -129,13 +132,30 @@ impl Ast for AssignExpr {
             _ => todo!()
         };
         // Recall cached value from `typecheck`
+=======
+        
+        // Get the type of the assignment
+        let lhs_type = self.ty.get().unwrap();
+        
+>>>>>>> da-submit
         // T1 holds value
         cg.emit(Comment("Popping rvalue for assignment"));
         cg.emit_pop(CG::T1);
         // T0 holds location
         cg.emit(Comment("Popping lvalue for assignment"));
         cg.emit_pop(CG::T0);
+<<<<<<< HEAD
         cg.emit((store_ins, CG::T1, CG::T0, Ix(0)));
+=======
+        
+        // Use sb for char type, sw for others
+        if let TypeNode::Char = lhs_type {
+            cg.emit(("sb", CG::T1, CG::T0, Ix(0)));
+        } else {
+            cg.emit(("sw", CG::T1, CG::T0, Ix(0)));
+        }
+        
+>>>>>>> da-submit
         cg.emit(Comment("Putting value back on stack (for chains)"));
         cg.emit_push(CG::T1);
     }
@@ -291,7 +311,14 @@ impl Ast for AccessExpr {
         let offset = vs.offset.get().unwrap();
         self.obj.codegen_lvalue(cg);
         cg.emit_pop(CG::T0);
-        cg.emit(("lw", CG::T0, CG::T0, Ix(*offset)));
+        // --- BEGIN CHANGES ---
+        // Added: Check the field's type to choose 'lb' for char (1-byte) or 'lw' for others.
+        // This ensures byte-level loading for struct fields of type char, fixing alignment.
+        // Previously, it always used 'lw', which could cause issues for 1-byte fields.
+        let load_instr = if let TypeNode::Char = *vs.ty { "lb" } else { "lw" };
+        // Updated: Use the dynamic load_instr instead of hardcoded "lw".
+        cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
+        // --- END CHANGES ---
         cg.emit_push(CG::T0);
     }
 
@@ -342,12 +369,14 @@ impl Expr for AddrExpr {}
 
 pub struct DerefExpr {
     pub ptr: Boxpr,
-    deref_sym: OnceCell<Rc<StructDeclSymbol>>
+    deref_sym: OnceCell<Rc<StructDeclSymbol>>,
+    pub ty: OnceCell<TypeNode>,
 }
 
 impl DerefExpr {
     pub fn new(expr: Boxpr) -> Rc<Self> {
         Rc::new(DerefExpr {
+            ty: OnceCell::new(),
             ptr: expr,
             deref_sym: OnceCell::new()
         })
@@ -371,6 +400,11 @@ impl Ast for DerefExpr {
     fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
         let inner_ty = self.ptr.typecheck(tc)?;
         if let TypeNode::Reference(pointee) = inner_ty {
+            // --- BEGIN CHANGES ---
+            // Added: Store the dereferenced type for use in codegen.
+            // This ensures we can check for TypeNode::Char later without re-running typecheck.
+            self.ty.set((*pointee).clone()).unwrap();
+            // --- END CHANGES ---
             Some((*pointee).clone())
         } else {
             tc.raise_error(self.ptr.clone(), "Attempt to dereference a non-pointer".into());
@@ -385,7 +419,15 @@ impl Ast for DerefExpr {
     fn codegen(&self, cg: &mut Codegen) {
         self.ptr.codegen(cg);
         cg.emit_pop(CG::T1);
-        cg.emit(("lw", CG::T0, CG::T1, Ix(0)));
+        // --- BEGIN CHANGES ---
+        // Removed: Unnecessary and inefficient call to self.typecheck(...) for a new context.
+        // Added: Check the stored type to choose 'lb' for char (1-byte) or 'lw' for others.
+        // This fixes alignment by ensuring byte-level dereferencing for char pointers.
+        // Previously, it always used 'lw', causing issues for 1-byte types.
+        let load_instr = if let TypeNode::Char = self.ty.get().unwrap() { "lb" } else { "lw" };
+        // Updated: Use the dynamic load_instr instead of hardcoded "lw".
+        cg.emit((load_instr, CG::T0, CG::T1, Ix(0)));
+        // --- END CHANGES ---
         cg.emit_push(CG::T0);
     }
 }
@@ -395,7 +437,13 @@ impl Loc for DerefExpr {}
 
 pub struct IndexExpr {
     pub ptr: Boxpr,
-    pub index: Boxpr
+     // --- BEGIN CHANGES ---
+    // Added: New field to store the indexed type, set during typecheck.
+    // This allows codegen to access the type easily for choosing load instructions,
+    // mirroring the pattern in DerefExpr and fixing alignment for char arrays/pointers.
+    pub ty: OnceCell<TypeNode>,   
+    pub index: Boxpr,
+    pub is_ptr: OnceCell<bool>,
 }
 
 impl Ast for IndexExpr {
@@ -414,6 +462,11 @@ impl Ast for IndexExpr {
     fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
         let ptr_ty = self.ptr.typecheck(tc)?.clone();
         let index_ty = self.index.typecheck(tc)?;
+        if let TypeNode::Reference(ref r) = ptr_ty {
+            self.is_ptr.set(true);
+        } else {
+            self.is_ptr.set(false);
+        }
         if let TypeNode::Reference(ref r) | TypeNode::Array(ref r, _) = ptr_ty {
             if index_ty != TypeNode::Int {
                 tc.raise_error(
@@ -421,8 +474,15 @@ impl Ast for IndexExpr {
                     "Indices of an array or pointer must be integers".into()
                 );
             }
-            tc.cache_type(&(self.ptr.clone() as Rc<dyn Ast + 'static>), r);
-            Some(r.as_ref().clone())
+            tc.cache_type(&(self.ptr.clone() as _), r);
+            // --- BEGIN CHANGES ---
+            // Added: Store the inner type for use in codegen.
+            // This ensures we can check for TypeNode::Char later to choose the correct load instruction.
+            let inner_ty = r.as_ref().clone();
+            self.ty.set(inner_ty.clone()).unwrap();
+            // Updated: Return inner_ty to keep original behavior while storing it.
+            Some(inner_ty)
+            // --- END CHANGES ---
         } else {
             tc.raise_error(self.ptr.clone(), "Only pointers and arrays can be indexed".into());
             None
@@ -436,7 +496,12 @@ impl Ast for IndexExpr {
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         let ty = cg.type_cache.get(&(self.ptr.clone() as Rc<dyn Ast + 'static>)).unwrap();
         let ty_size = ty.size();
-        self.ptr.codegen_lvalue(cg);   
+        dbg!(ty_size);
+        if *self.is_ptr.get().unwrap() {
+            self.ptr.codegen(cg);   
+        } else {
+            self.ptr.codegen_lvalue(cg);
+        }
         self.index.codegen(cg);
         cg.emit_pop(CG::T1);
         cg.emit(("li", CG::T2, ty_size));
@@ -456,7 +521,18 @@ impl Ast for IndexExpr {
         };
         self.codegen_lvalue(cg);
         cg.emit_pop(CG::T0);
+<<<<<<< HEAD
         cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
+=======
+        // --- BEGIN CHANGES ---
+        // Added: Check the stored type to choose 'lb' for char (1-byte) or 'lw' for others.
+        // This fixes alignment for indexing into char arrays/pointers (e.g., in tests/alignment.kl).
+        // Previously, it always used 'lw', causing byte misalignment.
+        let load_instr = if let TypeNode::Char = self.ty.get().unwrap() { "lb" } else { "lw" };
+        // Updated: Use the dynamic load_instr instead of hardcoded "lw".
+        cg.emit((load_instr, CG::T1, CG::T0, Ix(0)));
+        // --- END CHANGES ---
+>>>>>>> da-submit
         cg.emit_push(CG::T1);
     }
 }

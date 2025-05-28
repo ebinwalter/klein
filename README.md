@@ -10,3 +10,7 @@ Klein can be built like any other Cargo project.  To compile a .kl file, run
 cargo run -- file.kl
 ```
 and the assembly will be output to `file.s`, which can be run with QtSpim.
+
+`tests/alignment.kl` tests our ability to move bytes by copying part of the string,
+"hello worble", to a lower portion of the address space.  Once loaded and run in QtSpim,
+you should be able to see this in the 'Data' view.

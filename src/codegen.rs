@@ -74,6 +74,7 @@ impl Drop for Codegen<'_> {
     fn drop(&mut self) {
         let mut final_emission: Vec<Box<dyn Emittable>> = Vec::new();
         for (key, value) in self.string_table.iter() {
+            final_emission.push(Box::new(Directive::Data));
             final_emission.push(Box::new(Label(value.clone())));
             final_emission.push(Box::new(Directive::Asciiz(key.clone())));
         }
@@ -195,7 +196,7 @@ impl Emittable for Directive {
     fn emit(&self) -> String {
         match self {
             Self::Data => ".data\n".into(),
-            Self::Asciiz(s) => format!(".data\n.asciiz {}\n", s),
+            Self::Asciiz(s) => format!(".asciiz {}\n", s),
             Self::Text => ".text\n".into(),
             Self::Space(size) => format!(".space {size}\n")
         }

@@ -160,6 +160,7 @@ impl Ast for VarDecl {
             let size = sym.ty.size();
             let name = &sym.id;
             cg.emit(Directive::Data);
+            cg.emit(".align 4");
             cg.emit(Label(&format!("_{}", name)));
             cg.emit(Directive::Space(size));
         }

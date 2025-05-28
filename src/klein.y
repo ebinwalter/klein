@@ -232,7 +232,9 @@ Loc -> Result<BoxLoc, ()>
   | '*' NAExpr { Ok(DerefExpr::new($2?)) }
   | NAExpr '[' Expr ']' { Ok(box_loc(IndexExpr {
     ptr: $1?,
-    index: $3?
+    index: $3?,
+    is_ptr: OnceCell::new(),
+    ty: OnceCell::new()
   }))}
   ;
 

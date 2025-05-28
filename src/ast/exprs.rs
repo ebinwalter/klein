@@ -521,18 +521,12 @@ impl Ast for IndexExpr {
         };
         self.codegen_lvalue(cg);
         cg.emit_pop(CG::T0);
-<<<<<<< HEAD
-        cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
-=======
-        // --- BEGIN CHANGES ---
         // Added: Check the stored type to choose 'lb' for char (1-byte) or 'lw' for others.
         // This fixes alignment for indexing into char arrays/pointers (e.g., in tests/alignment.kl).
         // Previously, it always used 'lw', causing byte misalignment.
         let load_instr = if let TypeNode::Char = self.ty.get().unwrap() { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
         cg.emit((load_instr, CG::T1, CG::T0, Ix(0)));
-        // --- END CHANGES ---
->>>>>>> da-submit
         cg.emit_push(CG::T1);
     }
 }

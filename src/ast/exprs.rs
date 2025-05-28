@@ -123,7 +123,8 @@ impl Ast for AssignExpr {
         self.loc.codegen_lvalue(cg);
         cg.emit(Comment("Generating rvalue for assignment"));
         self.value.codegen(cg);
-<<<<<<< HEAD
+        cg.emit_pop(CG::T1);
+        cg.emit_pop(CG::T0);
         // Adjust instruction for storing a value based
         // on the expression's size
         let store_ins = match self.ty.get().unwrap().size() {
@@ -131,31 +132,8 @@ impl Ast for AssignExpr {
             4 => "sw",
             _ => todo!()
         };
-        // Recall cached value from `typecheck`
-=======
-        
-        // Get the type of the assignment
-        let lhs_type = self.ty.get().unwrap();
-        
->>>>>>> da-submit
-        // T1 holds value
-        cg.emit(Comment("Popping rvalue for assignment"));
-        cg.emit_pop(CG::T1);
-        // T0 holds location
-        cg.emit(Comment("Popping lvalue for assignment"));
-        cg.emit_pop(CG::T0);
-<<<<<<< HEAD
         cg.emit((store_ins, CG::T1, CG::T0, Ix(0)));
-=======
         
-        // Use sb for char type, sw for others
-        if let TypeNode::Char = lhs_type {
-            cg.emit(("sb", CG::T1, CG::T0, Ix(0)));
-        } else {
-            cg.emit(("sw", CG::T1, CG::T0, Ix(0)));
-        }
-        
->>>>>>> da-submit
         cg.emit(Comment("Putting value back on stack (for chains)"));
         cg.emit_push(CG::T1);
     }
@@ -521,12 +499,7 @@ impl Ast for IndexExpr {
         };
         self.codegen_lvalue(cg);
         cg.emit_pop(CG::T0);
-        // Added: Check the stored type to choose 'lb' for char (1-byte) or 'lw' for others.
-        // This fixes alignment for indexing into char arrays/pointers (e.g., in tests/alignment.kl).
-        // Previously, it always used 'lw', causing byte misalignment.
-        let load_instr = if let TypeNode::Char = self.ty.get().unwrap() { "lb" } else { "lw" };
-        // Updated: Use the dynamic load_instr instead of hardcoded "lw".
-        cg.emit((load_instr, CG::T1, CG::T0, Ix(0)));
+        cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
         cg.emit_push(CG::T1);
     }
 }

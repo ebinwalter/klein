@@ -39,11 +39,7 @@ impl Type {
             (Self::Int, Self::Char) => true,
             (Self::Double, Self::Double) => true,
             (Self::Void, Self::Void) => true,
-            (Self::Reference(t1), Self::Reference(t2)) => match (&**t1, &**t2) {
-                (Self::Void, _) => true,
-                (_, Self::Void) => true,
-                (a, b) => a.is_subtype_of(b)
-            }
+            (Self::Reference(t1), Self::Reference(t2)) => t1.is_subtype_of(t2),
             // Arrays are internally represented as pointers, but we don't want
             // to let users arbitrarily convert pointers into sized arrays
             (Self::Array(t1, _count), Self::Reference(t2)) => t1 == t2,

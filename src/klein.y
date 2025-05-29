@@ -168,7 +168,6 @@ NAExpr -> Result<Boxpr, ()>
   : Loc {
     Ok($1? as Boxpr)
   }
-  | 'PRIM_NULL' { Ok(box_expr(NullLit)) }
   | IntLit { $1.map(box_expr) }
   | StringLit { $1.map(box_expr) }
   | BoolLit { $1.map(box_expr) }

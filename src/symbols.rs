@@ -63,11 +63,19 @@ impl std::fmt::Debug for FuncSymbol {
     }
 }
 
-#[derive(Debug)]
 pub struct StructDeclSymbol {
     pub id: String,
     pub scope: TableLayer,
     pub size: OnceCell<u32>
+}
+
+impl std::fmt::Debug for StructDeclSymbol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FuncSymbol")
+            .field("id", &self.id)
+            .field("size", &self.size.get())
+            .finish()
+    }
 }
 
 pub type TableLayer = Rc<RefCell<HashMap<String, Rc<Symbol>>>>;

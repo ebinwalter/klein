@@ -195,6 +195,16 @@ impl Ast for ReturnStmt {
         self.expr.clone()?.typecheck(tc);
         None
     }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        if let Some(ref e) = self.expr {
+            e.codegen(cg);
+            cg.emit_pop(CG::V0);
+        }
+        let fname = cg.function_stack.last().unwrap();
+        let return_label = format!("{fname}_exit");
+        cg.emit(("j", Label(return_label)));
+    }
 }
 
 impl Stmt for ReturnStmt {}

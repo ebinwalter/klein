@@ -298,6 +298,7 @@ impl Ast for FunDecl {
         } else {
             format!("_{}", f.id)
         };
+        cg.function_stack.push(name.clone());
         cg.emit(Directive::Text);
         // Preamble
         cg.emit(Label(&name));
@@ -322,5 +323,6 @@ impl Ast for FunDecl {
             cg.emit(("addi", CG::V0, CG::ZERO, 10));
             cg.emit("syscall");
         }
+        cg.function_stack.pop().unwrap();
     }
 }

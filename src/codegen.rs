@@ -8,7 +8,8 @@ pub struct Codegen<'a> {
     next_label: usize,
     string_table: HashMap<String, String>,
     ref_text: &'a str,
-    pub type_cache: TypeCache
+    pub type_cache: TypeCache,
+    pub function_stack: Vec<String>
 }
 
 impl<'a> Codegen<'a> {
@@ -30,7 +31,8 @@ impl<'a> Codegen<'a> {
             next_label: 0,
             ref_text: text,
             string_table: HashMap::new(),
-            type_cache: cache
+            type_cache: cache,
+            function_stack: Vec::new(),
         }
     }
 

@@ -1,0 +1,42 @@
+struct LinkedList {
+  struct LinkedList *next;
+  void *item;
+}
+
+int count_1;
+// should find 20 @ 0x10010010
+int count_2;
+// should find 290 @ 0x10010020
+int sum_2;
+struct LinkedList[50] ll_heap;
+
+fun main() {
+  int i = 0;
+  while i < 49 {
+    ll_heap[i].next = &ll_heap[i+1];
+    ll_heap[i].item = i;
+    i = i + 1;
+  }
+  ll_heap[9].next = null;
+  int count = 0;
+  struct LinkedList *current = &ll_heap[0];
+  while current != null {
+    current = (*current).next;
+    count = count + 1;
+  }
+  count_1 = count;
+  ll_heap[29].next = null;
+  ll_heap[9].next = &ll_heap[20];
+  int sum = 0;
+  count = 0;
+  current = &ll_heap[0];
+  int item;
+  while current != null {
+    item = (*current).item;
+    sum = sum + item;
+    current = (*current).next;
+    count = count + 1;
+  }
+  sum_2 = sum;
+  count_2 = count;
+}

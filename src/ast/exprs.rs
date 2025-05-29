@@ -4,6 +4,24 @@ use super::*;
 mod ops;
 pub use ops::*;
 
+pub struct NullLit;
+
+impl Ast for NullLit {
+    fn unparse(&self, up: Up) {
+        up.write("null");
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        Some(Type::Reference(Type::Void.into()))
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        cg.emit_push(CG::ZERO);
+    }
+}
+
+impl Expr for NullLit {}
+
 pub struct IntLit {
     pub value: usize,
     pub line: usize,

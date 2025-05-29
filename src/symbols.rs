@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, OnceCell};
 use std::borrow::{Borrow, BorrowMut};
 use std::iter::Iterator;
-use crate::ast::{FunDecl, TypeNode};
+use crate::ast::{FunDecl};
 
 use lrpar::Span;
 
@@ -18,7 +18,7 @@ impl Symbol {
     pub fn struct_sym(&self) -> Option<Rc<StructDeclSymbol>> {
         match self {
             Symbol::Var(vs) => {
-                let TypeNode::Struct(_, ref ssym) = *vs.ty else { 
+                let Type::Struct(_, ref ssym) = *vs.ty else { 
                     return None 
                 }; 
                 return Some(ssym.get()?.clone());
@@ -40,7 +40,7 @@ impl Symbol {
 #[derive(Debug)]
 pub struct VarSymbol {
     pub id: String,
-    pub ty: Rc<TypeNode>,
+    pub ty: Rc<Type>,
     pub offset: OnceCell<i32>,
     pub global: OnceCell<bool>,
 }
@@ -49,8 +49,8 @@ pub struct FuncSymbol {
     pub id: String,
     pub scope: TableLayer,
     pub has_body: bool,
-    pub arg_types: Vec<TypeNode>,
-    pub return_type: TypeNode,
+    pub arg_types: Vec<Type>,
+    pub return_type: Type,
 }
 
 impl std::fmt::Debug for FuncSymbol {

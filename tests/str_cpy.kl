@@ -6,13 +6,31 @@ fun str_cpy(char *dest, char *src) {
   }
 }
 
+// Requires char literals to compile
 fun strncpy(char *dest, char *src, int n) {
   int ix = 0;
-  while src[ix] != 0 and ix < n - 1 {
+  while src[ix] != '\0' and ix < n - 1 {
     dest[ix] = src[ix];
     ix = ix + 1;
   }
   dest[ix] = '\0';
+}
+
+// Requires char arithmetic to be able to compile
+fun streq(char *s1, char *s2) {
+  while *s1 != '\0' {
+    if *s1 < *s2 {
+      return -1;
+    } else {
+      // TODO: can we make this an 'else if' thing?
+      if *s1 > *s2 {
+        return 1
+      }
+    }
+    s1 = s1 + 1;
+    s2 = s2 + 2;
+  }
+  return 0;
 }
 
 fun main() {

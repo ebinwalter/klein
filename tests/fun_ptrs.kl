@@ -1,0 +1,16 @@
+fun proxy((int, int) -> int int_fun, int x, int y) -> int {
+  return int_fun(x, y);
+}
+
+fun add2(int x, int y) -> int {
+  return x + y;
+}
+
+fun sub2(int x, int y) -> int {
+  return x - y;
+}
+
+fun main() {
+  out <- proxy(add2, 5, 10);
+  out <- proxy(sub2, 10, 5);
+}

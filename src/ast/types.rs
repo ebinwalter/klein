@@ -1,19 +1,19 @@
 use super::*;
 
 #[derive(Debug, Clone)]
-pub enum TypeNode {
-    Struct(IdNode, OnceCell<Rc<StructDeclSymbol>>),
+pub enum Type {
+    Struct(Rc<Id>, OnceCell<Rc<StructDeclSymbol>>),
     Bool,
     Int,
     Char,
     Double,
     Void,
     SelfRef,
-    Reference(Rc<TypeNode>),
-    Array(Rc<TypeNode>, u32),
+    Reference(Rc<Type>),
+    Array(Rc<Type>, u32),
 }
 
-impl TypeNode {
+impl Type {
     pub fn size(&self) -> u32 {
         match self {
             Self::Struct(_, decl) => {
@@ -49,7 +49,7 @@ impl TypeNode {
     }
 }
 
-impl Display for TypeNode {
+impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Struct(id, _sym) => {
@@ -74,31 +74,31 @@ impl Display for TypeNode {
     }
 }
 
-impl PartialEq for TypeNode {
+impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
-        if let TypeNode::Reference(inner) = other {
-            if let TypeNode::Void = **inner {
+        if let Type::Reference(inner) = other {
+            if let Type::Void = **inner {
                 return true;
             }
         }
         match self {
-            TypeNode::Struct(_this_id, this_cell) => {
-                if let TypeNode::Struct(_other_id, other_cell) = other {
+            Type::Struct(_this_id, this_cell) => {
+                if let Type::Struct(_other_id, other_cell) = other {
                     Rc::ptr_eq(this_cell.get().unwrap(), other_cell.get().unwrap())
                 } else {
                     false
                 }
             },
-            TypeNode::Int => matches!(other, TypeNode::Int),
-            TypeNode::Bool => matches!(other, TypeNode::Bool),
-            TypeNode::Char => matches!(other, TypeNode::Char),
-            TypeNode::Double => matches!(other, TypeNode::Double),
-            TypeNode::Void => matches!(other, TypeNode::Void),
-            TypeNode::SelfRef => todo!(),
-            TypeNode::Reference(self_inner) => {
-                if let TypeNode::Void = **self_inner {
+            Type::Int => matches!(other, Type::Int),
+            Type::Bool => matches!(other, Type::Bool),
+            Type::Char => matches!(other, Type::Char),
+            Type::Double => matches!(other, Type::Double),
+            Type::Void => matches!(other, Type::Void),
+            Type::SelfRef => todo!(),
+            Type::Reference(self_inner) => {
+                if let Type::Void = **self_inner {
                      true
-                } else if let TypeNode::Reference(other_inner) = other {
+                } else if let Type::Reference(other_inner) = other {
                     self_inner == other_inner
                 } else {
                     false
@@ -109,24 +109,24 @@ impl PartialEq for TypeNode {
     }
 }
 
-impl Ast for TypeNode {
+impl Ast for Type {
     fn unparse(&self, up: Up) {
         match self {
-            TypeNode::Struct(id, _) => {
+            Type::Struct(id, _) => {
                 up.write("struct ");
                 id.unparse(up);
             }
-            TypeNode::Bool => up.write("bool"),
-            TypeNode::Int => up.write("int"),
-            TypeNode::Double => up.write("double"),
-            TypeNode::Char => up.write("char"),
-            TypeNode::SelfRef => up.write("self"),
-            TypeNode::Void => up.write("void"),
-            TypeNode::Reference(ty) => {
+            Type::Bool => up.write("bool"),
+            Type::Int => up.write("int"),
+            Type::Double => up.write("double"),
+            Type::Char => up.write("char"),
+            Type::SelfRef => up.write("self"),
+            Type::Void => up.write("void"),
+            Type::Reference(ty) => {
                 ty.unparse(up);
                 up.write("*");
             },
-            TypeNode::Array(ty, count) => {
+            Type::Array(ty, count) => {
                 ty.unparse(up);
                 up.write(&format!("[{count}]"));
             }
@@ -134,16 +134,16 @@ impl Ast for TypeNode {
     }
 
     fn analyze_names(&self, na: NACtx) {
-        use TypeNode::*;
+        use Type::*;
         match self {
             Void => (),
-            TypeNode::Struct(id, cell) => {
+            Type::Struct(id, cell) => {
                 if let Some(s) = na.lookup(id) {
                     if let Symbol::Struct(ref rcs) = *s {
                         cell.set(rcs.clone()).unwrap();
                     } else {
                         na.raise_error(
-                            id,
+                            id.as_ref(),
                             format!("Usage of non-struct symbol {} in a struct type", 
                                 na.string_for_id(id)));
                     }
@@ -152,17 +152,17 @@ impl Ast for TypeNode {
                         "Usage of undefined symbol {} in a struct type ",
                         na.string_for_id(id)
                     );
-                    na.raise_error(id, err);
+                    na.raise_error(id.as_ref(), err);
                 }
             },
-            TypeNode::Array(ty, _count) => {
+            Type::Array(ty, _count) => {
                 ty.analyze_names(na);
             }
-            TypeNode::Reference(ty) => {
+            Type::Reference(ty) => {
                 ty.analyze_names(na);
             }
-            TypeNode::Int | TypeNode::Bool | TypeNode::Char
-                | TypeNode::Double => (),
+            Type::Int | Type::Bool | Type::Char
+                | Type::Double => (),
             _ => todo!(),
         }
     }

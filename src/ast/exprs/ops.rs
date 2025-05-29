@@ -11,9 +11,9 @@ enum OpType {
 trait BinOp {
     const SYMBOL: &'static str;
     const OP_TYPE: OpType;
-    const OUT_TYPE: TypeNode = TypeNode::Void;
+    const OUT_TYPE: Type = Type::Void;
     fn operands(&self) -> (&Boxpr, &Boxpr);
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         panic!("Unimplemented binary operator {}", Self::SYMBOL)
     }
 }
@@ -32,7 +32,7 @@ impl<T> Ast for T
         rhs.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let (lhs, rhs) = self.operands();
         let t_lhs = lhs.typecheck(tc);
         let t_rhs = rhs.typecheck(tc);
@@ -45,10 +45,10 @@ impl<T> Ast for T
         let (t_lhs, t_rhs) = (t_lhs.unwrap(), t_rhs.unwrap());
         let lhs_ast: Rc<dyn Ast> = lhs.clone();
         // We need to cache this because some operators are overloaded
-        tc.cache_type(&lhs_ast, &t_lhs.clone());
+        tc.cache_type(lhs_ast.as_ref(), &t_lhs.clone());
         match Self::OP_TYPE {
             OpType::Numeric => {
-                if !matches!(t_lhs, TypeNode::Int | TypeNode::Double) {
+                if !matches!(t_lhs, Type::Int | Type::Double) {
                     let m = format!(
                         "{} is a numeric operator which only takes ints or \
                         doubles as operands",
@@ -76,14 +76,14 @@ impl<T> Ast for T
                     );
                     tc.raise_error(rhs.clone(), m);
                 }
-                if let TypeNode::Struct(_, _) = t_lhs {
+                if let Type::Struct(_, _) = t_lhs {
                     let m = "structs can't be compared directly".into();
                     tc.raise_error(lhs.clone(), m);
                 }
-                Some(TypeNode::Bool)
+                Some(Type::Bool)
             }
             OpType::NumericRelational => {
-                if !matches!(t_lhs, TypeNode::Int | TypeNode::Double) {
+                if !matches!(t_lhs, Type::Int | Type::Double) {
                     let m = format!(
                         "{} is a numeric relational operator which only takes ints or \
                         doubles as operands",
@@ -99,25 +99,25 @@ impl<T> Ast for T
                     );
                     tc.raise_error(rhs.clone(), m);
                 }
-                Some(TypeNode::Bool)
+                Some(Type::Bool)
             }
             OpType::Logical => {
-                if t_lhs != TypeNode::Bool {
+                if t_lhs != Type::Bool {
                     tc.raise_error(lhs.clone(),
                         "Arguments to logical operators must be boolean".into());
                 }
-                if t_rhs != TypeNode::Bool {
+                if t_rhs != Type::Bool {
                     tc.raise_error(rhs.clone(),
                         "Arguments to logical operators must be boolean".into());
                 }
-                Some(TypeNode::Bool)
+                Some(Type::Bool)
             }
         }
     }
 
     fn codegen(&self, cg: &mut Codegen) {
         let (lhs, rhs) = self.operands();
-        let lhs_ty = cg.type_cache.get(&(lhs.clone() as _))
+        let lhs_ty = cg.type_cache.get(lhs.as_ref())
             .expect("type should've been cached during type checking for \
                      binary operator")
             .clone();
@@ -166,13 +166,13 @@ impl BinOp for Plus {
     fn operands<'a>(&self) -> (&Boxpr, &Boxpr) {
         (&self.0, &self.1)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         match lhs_ty {
-            TypeNode::Int => {
+            Type::Int => {
                 cg.emit(("add", CG::T0, CG::T0, CG::T1));
                 cg.emit_push(CG::T0);
             },
-            TypeNode::Double => {
+            Type::Double => {
                 todo!("fp arithmetic");
             },
             _ => unreachable!()
@@ -188,13 +188,13 @@ impl BinOp for Minus {
     fn operands<'a>(&self) -> (&Boxpr, &Boxpr) {
         (&self.0, &self.1)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         match lhs_ty {
-            TypeNode::Int => {
+            Type::Int => {
                 cg.emit(("sub", CG::T0, CG::T0, CG::T1));
                 cg.emit_push(CG::T0);
             },
-            TypeNode::Double => {
+            Type::Double => {
                 todo!("implement fp arithmetic");
             },
             _ => unreachable!()
@@ -235,7 +235,7 @@ impl BinOp for LTExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         cg.emit(("slt", CG::T2, CG::T0, CG::T1));
         cg.emit_push(CG::T2);
     }
@@ -252,7 +252,7 @@ impl BinOp for LTEExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
         cg.emit(("addi", CG::T1, CG::T1, 1));
         cg.emit(("slt", CG::T2, CG::T0, CG::T1));
         cg.emit_push(CG::T2);
@@ -270,7 +270,7 @@ impl BinOp for GTExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         cg.emit(("slt", CG::T2, CG::T1, CG::T0));
         cg.emit_push(CG::T2);
     }
@@ -287,7 +287,7 @@ impl BinOp for GTEExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         cg.emit(("addi", CG::T0, CG::T0, 1));
         cg.emit(("slt", CG::T2, CG::T1, CG::T0));
         cg.emit_push(CG::T2);
@@ -305,7 +305,7 @@ impl BinOp for EQExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
         cg.emit(("slt", "$t2", CG::T0, CG::T1));
         cg.emit(("slt", "$t3", CG::T1, CG::T0));
         cg.emit(("add", "$t2", "$t2", "$t3"));
@@ -325,7 +325,7 @@ impl BinOp for NEQExpr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
         cg.emit(("slt", "$t2", CG::T0, CG::T1));
         cg.emit(("slt", "$t3", CG::T1, CG::T0));
         cg.emit(("add", "$t2", "$t2", "$t3"));
@@ -345,7 +345,7 @@ impl BinOp for LogicalOr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &TypeNode) {
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         let (lhs, rhs) = self.operands();
         lhs.codegen(cg);
     }

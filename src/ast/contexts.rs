@@ -1,7 +1,9 @@
+#[feature(never_type)]
 use lrpar::Span;
 use std::io::stdout;
+use std::ptr;
 use std::rc::Rc;
-use std::hash::Hash;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::collections::HashMap;
 
 use crate::ast::*;
@@ -72,7 +74,7 @@ pub struct NameAnalysisContext<'a> {
 }
 
 impl<'a> NameAnalysisContext<'a> {
-    pub fn str_for_id(&self, id: &IdNode) -> &str {
+    pub fn str_for_id(&self, id: &Id) -> &str {
         unsafe {
             self.ref_text.get_unchecked(id.span.start()..id.span.end())
         }
@@ -95,18 +97,18 @@ impl<'a> NameAnalysisContext<'a> {
         *last += size;
         old
     }
-    pub fn string_for_id(&self, id: &IdNode) -> String {
+    pub fn string_for_id(&self, id: &Id) -> String {
         unsafe {
             self.ref_text.get_unchecked(id.span.start()..id.span.end()).to_owned()
         }
     }
-    pub fn define_or_err(&mut self, id: &IdNode, sym: Symbol) {
+    pub fn define_or_err(&mut self, id: &Id, sym: Symbol) {
         let name = self.string_for_id(id); 
         if let Err(SymTabError::Exists) = self.sym_tab.define(name.to_owned(), sym) {
             self.err_msgs.push(format!("Multiple declaration of identifier {name}"));
         }
     }
-    pub fn lookup_or_err(&mut self, id: &IdNode) -> Option<Rc<Symbol>> {
+    pub fn lookup_or_err(&mut self, id: &Id) -> Option<Rc<Symbol>> {
         let name = self.str_for_id(id);
         match self.sym_tab.lookup_global(name) {
             Ok(sym) => Some(sym),
@@ -122,7 +124,7 @@ impl<'a> NameAnalysisContext<'a> {
             }
         }
     }
-    pub fn lookup(&mut self, id: &IdNode) -> Option<Rc<Symbol>> {
+    pub fn lookup(&mut self, id: &Id) -> Option<Rc<Symbol>> {
         let name = self.str_for_id(id);
         match self.sym_tab.lookup_global(name) {
             Ok(sym) => Some(sym),
@@ -143,27 +145,8 @@ impl<'a> NameAnalysisContext<'a> {
 
 pub type NACtx<'a, 'b> = &'a mut NameAnalysisContext<'b>;
 
-pub struct RCKey(pub Rc<dyn Ast>);
-
-impl PartialEq for RCKey {
-    fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(
-            Rc::into_raw(self.0.clone()), 
-            Rc::into_raw(other.0.clone())
-        )
-    }
-}
-
-impl Eq for RCKey {}
-
-impl Hash for RCKey {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::ptr::hash(&*self.0, state);
-    }
-}
-
 pub struct TypeCache {
-    storage: HashMap<RCKey, TypeNode>,
+    storage: HashMap<u64, Type>,
 }
 
 impl TypeCache {
@@ -173,12 +156,16 @@ impl TypeCache {
         }
     }
 
-    pub fn insert(&mut self, what: &Rc<dyn Ast + 'static>, ty: &TypeNode) {
-        self.storage.insert(RCKey(what.clone()), ty.clone());
+    pub fn insert<T: ?Sized>(&mut self, what: *const T, ty: &Type) {
+        let mut hasher = DefaultHasher::new();
+        ptr::hash(what, &mut hasher);
+        self.storage.insert(hasher.finish(), ty.clone());
     }
 
-    pub fn get(&self, what: &Rc<dyn Ast + 'static>) -> Option<&TypeNode> {
-        self.storage.get(&RCKey(what.clone()))
+    pub fn get<T: ?Sized>(&self, what: *const T) -> Option<&Type> {
+        let mut hasher = DefaultHasher::new();
+        ptr::hash(what, &mut hasher);
+        self.storage.get(&hasher.finish())
     }
 }
 
@@ -200,8 +187,8 @@ impl TypeCheckingContext<'_> {
         self.err_msgs.push(m);
     }
 
-    pub fn cache_type(&mut self, what: &Rc<dyn Ast + 'static>, ty: &TypeNode) {
-        self.type_cache.insert(what, ty);
+    pub fn cache_type<T: ?Sized>(&mut self, what: *const T, ty: &Type) {
+        self.type_cache.insert(what, ty)
     }
 }
 

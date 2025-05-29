@@ -1,8 +1,17 @@
+#![allow(clippy::new_ret_no_self)]
 use super::*;
 
 pub struct IfStmt {
     pub cond: Boxpr,
     pub body: ScopeBlock,
+}
+
+impl IfStmt {
+    pub fn new(cond: Boxpr, body: ScopeBlock) -> Rc<dyn Stmt> {
+        Rc::new(IfStmt {
+            cond, body
+        })
+    }
 }
 
 impl Ast for IfStmt {
@@ -20,7 +29,7 @@ impl Ast for IfStmt {
         self.body.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.cond.typecheck(tc);
         self.body.typecheck(tc);
         None
@@ -48,6 +57,14 @@ pub struct IfElseStmt {
     pub else_body: ScopeBlock,
 }
 
+impl IfElseStmt {
+    pub fn new(cond: Boxpr, then_body: ScopeBlock, else_body: ScopeBlock) -> Rc<dyn Stmt> {
+        Rc::new(IfElseStmt {
+            cond, then_body, else_body
+        })
+    }
+}
+
 impl Ast for IfElseStmt {
     fn unparse(&self, up: &mut Unparser) {
         up.write_indent();
@@ -66,7 +83,7 @@ impl Ast for IfElseStmt {
         self.else_body.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.cond.typecheck(tc);
         self.then_body.typecheck(tc);
         self.else_body.typecheck(tc);
@@ -94,6 +111,14 @@ impl Ast for IfElseStmt {
 
 impl Stmt for IfElseStmt {}
 
+impl WhileStmt {
+    pub fn new(cond: Boxpr, body: ScopeBlock) -> BoxStmt {
+        Rc::new(WhileStmt {
+            cond, body
+        })
+    }
+}
+
 pub struct WhileStmt {
     pub cond: Boxpr,
     pub body: ScopeBlock,
@@ -114,7 +139,7 @@ impl Ast for WhileStmt {
         self.body.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.cond.typecheck(tc);
         self.body.typecheck(tc);
         None
@@ -143,6 +168,12 @@ pub struct ReturnStmt {
     pub expr: Option<Boxpr>
 }
 
+impl ReturnStmt {
+    pub fn new(expr: Option<Boxpr>) -> BoxStmt {
+        Rc::new(ReturnStmt { expr })
+    }
+}
+
 impl Ast for ReturnStmt {
     fn unparse(&self, up: &mut Unparser) {
         up.write_indent();
@@ -160,7 +191,7 @@ impl Ast for ReturnStmt {
         }
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.expr.clone()?.typecheck(tc);
         None
     }
@@ -170,6 +201,12 @@ impl Stmt for ReturnStmt {}
 
 pub struct ExprStmt {
     pub expr: Boxpr
+}
+
+impl ExprStmt {
+    pub fn new(expr: Boxpr) -> BoxStmt {
+        Rc::new(ExprStmt { expr })
+    }
 }
 
 impl Ast for ExprStmt {
@@ -183,7 +220,7 @@ impl Ast for ExprStmt {
         self.expr.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.expr.typecheck(tc);
         None
     }
@@ -200,6 +237,14 @@ pub struct InputStmt {
     pub loc: BoxLoc
 }
 
+impl InputStmt {
+    pub fn new(loc: BoxLoc) -> Rc<Self> {
+        InputStmt {
+            loc
+        }.into()
+    }
+}
+
 impl Ast for InputStmt {
     fn unparse(&self, up: Up) {
         up.write_indent();
@@ -212,8 +257,8 @@ impl Ast for InputStmt {
         self.loc.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
-        use TypeNode::*;
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        use Type::*;
         let loc_type = self.loc.typecheck(tc)?;
         match loc_type {
             Int | Bool | Char  => (),
@@ -236,6 +281,14 @@ pub struct OutputStmt {
     pub expr: Boxpr
 }
 
+impl OutputStmt {
+    pub fn new(expr: Boxpr) -> Rc<Self> {
+        OutputStmt {
+            expr
+        }.into()
+    }
+}
+
 impl Ast for OutputStmt {
     fn unparse(&self, up: Up) {
         up.write_indent();
@@ -248,8 +301,8 @@ impl Ast for OutputStmt {
         self.expr.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
-        use TypeNode::*;
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        use Type::*;
         let expr_type = self.expr.typecheck(tc)?;
         match expr_type {
             Int | Bool | Char  => (),

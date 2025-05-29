@@ -36,7 +36,7 @@ pub trait Ast {
     fn analyze_names(&self, na: NACtx) {}
     /// Check that our code has types such that code can actually be generated.
     /// Also resolve the names in struct access expressions.
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> { None }
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> { None }
     /// Compute offsets for variables declared in functions.
     fn compute_var_offsets(&self, oc: OCtx) {}
     /// Generates code for an AST node _unless_ the AST node should be treated
@@ -74,7 +74,7 @@ pub type Boxpr = Rc<dyn Expr>;
 
 /// Things that posit something to be used or acted on.
 pub trait Decl: Ast {
-    fn split_decl(&self) -> Option<(Rc<dyn Decl>, Rc<dyn Stmt>)> {
+    fn split_decl(&self, tc: &mut TypeCache) -> Option<(Rc<dyn Decl>, Rc<dyn Stmt>)> {
         None
     }
 }
@@ -108,7 +108,7 @@ impl Ast for DeclOrStmt {
         }
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         match self {
             DeclOrStmt::Decl(d) => d.clone().typecheck(tc),
             DeclOrStmt::Stmt(s) => s.clone().typecheck(tc),
@@ -136,6 +136,9 @@ pub struct Program {
 }
 
 impl Program {
+    pub fn new(decls: Vec<BoxDecl>) -> Rc<Self> {
+        Program {decls}.into()
+    }
     pub fn print(&self, txt: &str) {
         let mut up = Unparser::new_stdout(txt);
         self.unparse(&mut up);
@@ -198,7 +201,7 @@ impl Ast for Program {
         }
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         for decl in self.decls.iter() {
             decl.typecheck(tc);
         }
@@ -221,14 +224,21 @@ pub struct ScopeBlock {
 }
 
 impl ScopeBlock {
-    fn lift_decls(&self) {
+    fn new(list: Vec<DeclOrStmt>) -> Rc<Self> {
+        ScopeBlock {
+            list: list.into(),
+            table: OnceCell::new(),
+            scope_size: OnceCell::new(),
+        }.into()
+    }
+    fn lift_decls(&self, tc: &mut TypeCache) {
         let mut stmt_list = Vec::new();
         let mut decl_list = Vec::new();
         for item in self.list.try_borrow().unwrap().iter() {
             match item {
                 DeclOrStmt::Stmt(stmt) => stmt_list.push(stmt.clone()),
                 DeclOrStmt::Decl(decl) => {
-                    if let Some((decl, stmt)) = decl.split_decl() {
+                    if let Some((decl, stmt)) = decl.split_decl(tc) {
                         decl_list.push(decl);
                         stmt_list.push(stmt);
                    } else {
@@ -273,9 +283,9 @@ impl Ast for ScopeBlock {
         self.table.set(the_scope).expect("Table already set for this scope block");
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         self.list.try_borrow().unwrap().iter().for_each(|x| { x.typecheck(tc); });
-        self.lift_decls();
+        self.lift_decls(&mut tc.type_cache);
         None
     }
 
@@ -297,14 +307,14 @@ impl Ast for ScopeBlock {
     }
 }
 
-pub struct IdNode {
+pub struct Id {
     pub span: Span,
     pub sym: OnceCell<Rc<Symbol>>,
     pub line: usize,
     pub col: usize,
 }
 
-impl Clone for IdNode {
+impl Clone for Id {
     fn clone(&self) -> Self {
         let cell = OnceCell::new();
         if let Some(v) = self.sym.get() {
@@ -319,25 +329,33 @@ impl Clone for IdNode {
     }
 }
 
-impl IdNode {
+impl Id {
+    pub fn new(span: Span, line: usize, col: usize) -> Rc<Self> {
+        Id {
+            span,
+            line,
+            col,
+            sym: OnceCell::new(),
+        }.into()
+    }
     fn set_sym(&self, sym: Rc<Symbol>) {
         self.sym.set(sym).unwrap();
     }
 }
 
-impl std::fmt::Debug for IdNode {
+impl std::fmt::Debug for Id {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&format!("Identifier at line {}, col {}", self.line, self.col))
     }
 }
 
-fn span_to_str<'a>(ref s: Span, str: &'a str) -> &'a str {
+fn span_to_str<'s>(s: &Span, str: &'s str) -> &'s str {
     unsafe {
         str.get_unchecked(s.start()..s.end())
     }
 }
 
-impl Ast for IdNode {
+impl Ast for Id {
     fn unparse(&self, up: Up) {
         if let Some(sym) = self.sym.get() {
             up.write("$");
@@ -364,12 +382,12 @@ impl Ast for IdNode {
         self.sym.get().cloned()
     }
 
-fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         if let Symbol::Var(vs) = &**self.sym.get().unwrap() {
             let ty = (*vs.ty).clone();
             
             // Check if this is a struct type being used in an rvalue position
-            if let TypeNode::Struct(_, _) = ty {
+            if let Type::Struct(_, _) = ty {
                 tc.raise_error(
                     Rc::new(self.clone()),
                     "Struct variables cannot be used directly in expressions. Consider using a reference (&) or accessing a field.".into()
@@ -498,18 +516,26 @@ fn aligner_test() {
     assert_eq!(b.place(3), -24);
 }
 
-impl Loc for IdNode {}
+impl Loc for Id {}
 
-impl Expr for IdNode {}
+impl Expr for Id {}
 
 pub struct FormalParam { 
-    pub ty: TypeNode,
-    pub id: IdNode,
+    pub ty: Type,
+    pub id: Rc<Id>,
+}
+
+impl FormalParam {
+    pub fn new(ty: Type, id: Rc<Id>) -> Rc<Self> {
+        FormalParam {
+            ty, id 
+        }.into()
+    }
 }
 
 impl Ast for FormalParam {
     fn unparse(&self, up: Up) {
-        if let TypeNode::SelfRef = self.ty {
+        if let Type::SelfRef = self.ty {
             up.write("self");
         } else {
             self.ty.unparse(up);
@@ -519,13 +545,9 @@ impl Ast for FormalParam {
     }
 }
 
-pub struct FormalsList {
-    pub list: Vec<FormalParam>,
-}
-
-impl Ast for FormalsList {
+impl Ast for Vec<Rc<FormalParam>> {
     fn unparse(&self, up: Up) {
-        let mut it = self.list.iter();
+        let mut it = self.iter();
         it.next().inspect(|x| x.unparse(up));
         let () = it.map(|x| {
             up.write(", ");

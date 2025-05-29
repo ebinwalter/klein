@@ -1,9 +1,19 @@
 use super::*;
 
 pub struct StructDecl {
-    pub id: IdNode,
+    pub id: Rc<Id>,
     pub decls: Vec<BoxDecl>,
     pub scope: OnceCell<TableLayer>
+}
+
+impl StructDecl {
+    pub fn new(id: Rc<Id>, decls: Vec<BoxDecl>) -> Rc<Self> {
+        StructDecl {
+            id: id.into(),
+            decls,
+            scope: OnceCell::new(),
+        }.into()
+    }
 }
 
 impl Ast for StructDecl {
@@ -62,14 +72,25 @@ impl Ast for StructDecl {
 impl Decl for StructDecl {}
 
 pub struct VarDecl {
-    pub ty: TypeNode,
-    pub id: IdNode,
+    pub ty: Type,
+    pub id: Rc<Id>,
     pub sym: OnceCell<Rc<VarSymbol>>,
     pub init: Option<Boxpr>,
 }
 
+impl VarDecl {
+    pub fn new(ty: Type, id: Rc<Id>, init: Option<Boxpr>) -> Rc<Self> {
+        VarDecl {
+            ty: ty.into(),
+            id,
+            init,
+            sym: OnceCell::new(),
+        }.into()
+    }
+}
+
 impl Decl for VarDecl {
-    fn split_decl(&self) -> Option<(Rc<dyn Decl>, Rc<dyn Stmt>)> {
+    fn split_decl(&self, tc: &mut TypeCache) -> Option<(Rc<dyn Decl>, Rc<dyn Stmt>)> {
         if let Some(ref init) = self.init {
             let decl = VarDecl {
                 ty: self.ty.clone(),
@@ -77,12 +98,13 @@ impl Decl for VarDecl {
                 sym: self.sym.clone(),
                 init: None
             };
-            let assignment = AssignExpr {
-                loc: Rc::new(self.id.clone()),
-                value: init.clone(),
-                ty: OnceCell::from(self.ty.clone())
-            };
-            let stmt = ExprStmt { expr: Rc::new(assignment) };
+            let loc = self.id.clone();
+            let assignment = AssignExpr::new(
+                loc.clone(),
+                init.clone(),
+            );
+            tc.insert(&*assignment, &self.ty);
+            let stmt = ExprStmt { expr: assignment };
             Some((Rc::new(decl), Rc::new(stmt)))
         } else {
             None
@@ -111,7 +133,7 @@ impl Ast for VarDecl {
         if let Some(ref init) = self.init {
             init.analyze_names(na);
         }
-        let name = span_to_str(self.id.span, na.ref_text);
+        let name = span_to_str(&self.id.span, na.ref_text);
         let sym: Rc<_> = VarSymbol {
             id: name.to_owned(),
             ty: Rc::new(self.ty.clone()),
@@ -120,7 +142,7 @@ impl Ast for VarDecl {
         }.into();
         if let Ok(_existing) = na.sym_tab.lookup_local(name) {
             let m = format!("Redeclaration of variable {name}");
-            na.raise_error(&self.id, m);
+            na.raise_error(self.id.as_ref(), m);
             return;
         }
         self.sym.set(sym.clone()).unwrap();
@@ -128,7 +150,8 @@ impl Ast for VarDecl {
         self.id.set_sym(na.sym_tab.lookup_local(name).unwrap());
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        tc.cache_type(&*self.id, &self.ty);
         if let Some(init) = &self.init {
             let t = init.typecheck(tc)?;
             let expected = self.ty.clone();
@@ -136,6 +159,7 @@ impl Ast for VarDecl {
                 let m = format!("Attempt to initialize a variable of type {expected} with a value of type {t}");
                 tc.raise_error(init.clone(), m);
             }
+            tc.cache_type(self.id.as_ref(), &self.ty);
         }
         None
     }
@@ -168,12 +192,24 @@ impl Ast for VarDecl {
 }
 
 pub struct FunDecl { 
-    pub id: IdNode,
-    pub ret_ty: TypeNode,
-    pub formals: FormalsList,
+    pub id: Rc<Id>,
+    pub ret_ty: Type,
+    pub formals: Vec<Rc<FormalParam>>,
     pub body: Option<ScopeBlock>,
     /// Size of frame (includes former frame pointer)
     pub frame_size: OnceCell<u32>
+}
+
+impl FunDecl {
+    pub fn new(id: Rc<Id>, ret_ty: Type, formals: Vec<Rc<FormalParam>>, body: Option<ScopeBlock>) -> Rc<Self> {
+        FunDecl {
+            id,
+            ret_ty,
+            formals,
+            body,
+            frame_size: OnceCell::new(),
+        }.into()
+    }
 }
 
 impl Decl for FunDecl { }
@@ -200,21 +236,21 @@ impl Ast for FunDecl {
     }
 
     fn analyze_names(&self, na: NACtx) {
-        let name = span_to_str(self.id.span, na.ref_text);
+        let name = span_to_str(&self.id.span, na.ref_text);
         self.ret_ty.analyze_names(na);
         let layer = na.sym_tab.push_scope();
         let my_fun_sym = Rc::new(FuncSymbol {
             has_body: self.body.is_some(),
             id: name.to_owned(),
-            arg_types: self.formals.list.iter().map(|x| x.ty.clone()).collect(),
+            arg_types: self.formals.iter().map(|x| x.ty.clone()).collect(),
             return_type: self.ret_ty.clone(),
             scope: layer,
         });
         na.define_or_err(&self.id, Symbol::Func(my_fun_sym.clone()));
         let mut formal_aligner = Aligner::new(4, 4);
-        for formal in self.formals.list.iter() {
+        for formal in self.formals.iter() {
             formal.ty.analyze_names(na);
-            let formal_name = span_to_str(formal.id.span, na.ref_text);
+            let formal_name = span_to_str(&formal.id.span, na.ref_text);
             let formal_sym = VarSymbol {
                 id: formal_name.to_owned(),
                 ty: Rc::new(formal.ty.clone()),
@@ -234,13 +270,13 @@ impl Ast for FunDecl {
         self.id.set_sym(final_sym);
     }
     
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
-        for arg in self.formals.list.iter() {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        for arg in self.formals.iter() {
             arg.typecheck(tc);
         }
         if let Some(b) = &self.body {
             b.typecheck(tc);
-            b.lift_decls();
+            b.lift_decls(&mut tc.type_cache);
         }
         None
     }

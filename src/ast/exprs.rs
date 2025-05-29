@@ -1,3 +1,4 @@
+#![allow(clippy::new_ret_no_self)]
 use super::*;
 
 mod ops;
@@ -9,13 +10,19 @@ pub struct IntLit {
     pub col: usize
 }
 
+impl IntLit {
+    pub fn new(value: usize, line: usize, col: usize) -> Rc<Self> {
+        IntLit { value, line, col }.into()
+    }
+}
+
 impl Ast for IntLit {
     fn unparse(&self, up: &mut Unparser) {
         up.write(&self.value.to_string());
     }
 
-    fn typecheck(&self, _tc: TCCtx) -> Option<TypeNode> {
-        Some(TypeNode::Int)
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> {
+        Some(Type::Int)
     }
 
     fn codegen(&self, cg: &mut Codegen) {
@@ -32,13 +39,19 @@ pub struct StringLit {
     pub col: usize,
 }
 
+impl StringLit {
+    pub fn new(span: Span, line: usize, col: usize) -> Rc<Self> {
+        StringLit { span, line, col }.into()
+    }
+}
+
 impl Ast for StringLit {
     fn unparse(&self, up: Up) {
         up.write_span(self.span);
     }
 
-    fn typecheck(&self, _tc: TCCtx) -> Option<TypeNode> {
-        Some(TypeNode::Reference(Rc::new(TypeNode::Char)))
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> {
+        Some(Type::Reference(Rc::new(Type::Char)))
     }
 
     fn code_location(&self) -> Option<(usize, usize)> {
@@ -61,13 +74,19 @@ pub struct BoolLit {
     pub col: usize
 }
 
+impl BoolLit {
+    pub fn new(value: bool, line: usize, col: usize) -> Rc<BoolLit> {
+        BoolLit { value, line, col }.into()
+    }
+}
+
 impl Ast for BoolLit {
     fn unparse(&self, up: Up) {
         up.write(if self.value {"true"} else {"false"})
     }
 
-    fn typecheck(&self, _tc: TCCtx) -> Option<TypeNode> {
-        Some(TypeNode::Bool)
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> {
+        Some(Type::Bool)
     }
 
     fn codegen(&self, cg: &mut Codegen) {
@@ -85,7 +104,14 @@ impl Expr for BoolLit {}
 pub struct AssignExpr {
     pub loc: BoxLoc,
     pub value: Boxpr,
-    pub ty: OnceCell<TypeNode>
+}
+
+impl AssignExpr {
+    pub fn new(loc: BoxLoc, value: Boxpr) -> Rc<Self> {
+        AssignExpr { 
+            loc, value,
+        }.into()
+    }
 }
 
 impl Ast for AssignExpr {
@@ -100,11 +126,10 @@ impl Ast for AssignExpr {
         self.value.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let lhs_ty = self.loc.typecheck(tc)?;
         let rhs_ty = self.value.typecheck(tc)?;
-        tc.cache_type(&(self.loc.clone() as _), &lhs_ty);
-        self.ty.set(lhs_ty.clone());
+        tc.cache_type(self, &lhs_ty);
         if rhs_ty.is_subtype_of(&lhs_ty) {
             Some(rhs_ty)
         } else {
@@ -127,7 +152,7 @@ impl Ast for AssignExpr {
         cg.emit_pop(CG::T0);
         // Adjust instruction for storing a value based
         // on the expression's size
-        let store_ins = match self.ty.get().unwrap().size() {
+        let store_ins = match cg.type_cache.get(self).unwrap().size() {
             1 => "sb",
             4 => "sw",
             _ => todo!()
@@ -145,6 +170,12 @@ pub struct CallExpr {
     pub fun: BoxLoc,
     pub args: Vec<Boxpr>,
     pub fun_sym: OnceCell<Rc<FuncSymbol>>
+}
+
+impl CallExpr {
+    pub fn new(fun: BoxLoc, args: Vec<Boxpr>) -> Boxpr {
+        Rc::new(CallExpr { fun, args, fun_sym: OnceCell::new() })
+    }
 }
 
 impl Ast for CallExpr {
@@ -178,7 +209,7 @@ impl Ast for CallExpr {
         }
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let fun_arg_types = &self.fun_sym
             .get()
             .expect("Unset fun symbol after name analysis phase")
@@ -226,9 +257,17 @@ impl Expr for CallExpr {}
 
 pub struct AccessExpr {
     pub obj: Boxpr,
-    pub field: IdNode,
+    pub field: Rc<Id>,
     // Populated during typechecker phase
     pub sym: OnceCell<Rc<Symbol>>
+}
+
+impl AccessExpr {
+    pub fn new(obj: Boxpr, field: Rc<Id>) -> Rc<AccessExpr> {
+        AccessExpr {
+            obj, field, sym: OnceCell::new(),
+        }.into()
+    } 
 }
 
 impl Ast for AccessExpr {
@@ -242,14 +281,14 @@ impl Ast for AccessExpr {
         self.obj.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let obj_ty = self.obj.typecheck(tc);
-        if let Some(TypeNode::Struct(s, sym)) = obj_ty {
+        if let Some(Type::Struct(_, sym)) = obj_ty {
             let struct_sym = sym.get()
                 .unwrap();
             let struct_scope = struct_sym.scope.try_borrow()
                 .expect("Failed to borrow scope for struct type");
-            let field_string = span_to_str(self.field.span, tc.ref_text);
+            let field_string = span_to_str(&self.field.span, tc.ref_text);
             if let Some(sym_rc) = struct_scope.get(field_string) {
                 let Symbol::Var(ref v) = **sym_rc else {
                     let m = format!(
@@ -257,7 +296,7 @@ impl Ast for AccessExpr {
                         but it is not a member variable",
                         field_string
                     );
-                    tc.raise_error(Rc::new(self.field.clone()), m);
+                    tc.raise_error(self.field.clone(), m);
                     return None
                 };
                 self.field.set_sym(sym_rc.clone());
@@ -293,7 +332,7 @@ impl Ast for AccessExpr {
         // Added: Check the field's type to choose 'lb' for char (1-byte) or 'lw' for others.
         // This ensures byte-level loading for struct fields of type char, fixing alignment.
         // Previously, it always used 'lw', which could cause issues for 1-byte fields.
-        let load_instr = if let TypeNode::Char = *vs.ty { "lb" } else { "lw" };
+        let load_instr = if let Type::Char = *vs.ty { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
         cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
         // --- END CHANGES ---
@@ -319,6 +358,12 @@ pub struct AddrExpr {
     pub expr: Boxpr,
 }
 
+impl AddrExpr {
+    pub fn new(expr: Boxpr) -> Rc<Self> {
+        AddrExpr { expr }.into()
+    }
+}
+
 impl Ast for AddrExpr {
     fn unparse(&self, up: Up) {
         up.write("&");
@@ -333,9 +378,9 @@ impl Ast for AddrExpr {
         self.expr.code_location()
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let inner_ty = self.expr.typecheck(tc)?;
-        Some(TypeNode::Reference(Rc::new(inner_ty)))
+        Some(Type::Reference(Rc::new(inner_ty)))
     }
 
     fn codegen(&self, cg: &mut Codegen) {
@@ -348,13 +393,11 @@ impl Expr for AddrExpr {}
 pub struct DerefExpr {
     pub ptr: Boxpr,
     deref_sym: OnceCell<Rc<StructDeclSymbol>>,
-    pub ty: OnceCell<TypeNode>,
 }
 
 impl DerefExpr {
     pub fn new(expr: Boxpr) -> Rc<Self> {
         Rc::new(DerefExpr {
-            ty: OnceCell::new(),
             ptr: expr,
             deref_sym: OnceCell::new()
         })
@@ -375,13 +418,13 @@ impl Ast for DerefExpr {
         self.ptr.code_location()
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let inner_ty = self.ptr.typecheck(tc)?;
-        if let TypeNode::Reference(pointee) = inner_ty {
+        if let Type::Reference(pointee) = inner_ty {
             // --- BEGIN CHANGES ---
             // Added: Store the dereferenced type for use in codegen.
             // This ensures we can check for TypeNode::Char later without re-running typecheck.
-            self.ty.set((*pointee).clone()).unwrap();
+            tc.cache_type(self, &pointee);
             // --- END CHANGES ---
             Some((*pointee).clone())
         } else {
@@ -402,7 +445,7 @@ impl Ast for DerefExpr {
         // Added: Check the stored type to choose 'lb' for char (1-byte) or 'lw' for others.
         // This fixes alignment by ensuring byte-level dereferencing for char pointers.
         // Previously, it always used 'lw', causing issues for 1-byte types.
-        let load_instr = if let TypeNode::Char = self.ty.get().unwrap() { "lb" } else { "lw" };
+        let load_instr = if let Type::Char = cg.type_cache.get(self).unwrap() { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
         cg.emit((load_instr, CG::T0, CG::T1, Ix(0)));
         // --- END CHANGES ---
@@ -419,9 +462,21 @@ pub struct IndexExpr {
     // Added: New field to store the indexed type, set during typecheck.
     // This allows codegen to access the type easily for choosing load instructions,
     // mirroring the pattern in DerefExpr and fixing alignment for char arrays/pointers.
-    pub ty: OnceCell<TypeNode>,   
     pub index: Boxpr,
     pub is_ptr: OnceCell<bool>,
+}
+
+impl IndexExpr {
+    pub fn new(ptr: Boxpr, index: Boxpr) -> Boxpr {
+        Rc::new(IndexExpr { 
+            ptr, index, 
+            is_ptr: OnceCell::new()
+        })
+    }
+
+    pub fn new_loc(ptr: Boxpr, index: Boxpr) -> BoxLoc {
+        Rc::new(IndexExpr { ptr, index, is_ptr: OnceCell::new()})
+    }
 }
 
 impl Ast for IndexExpr {
@@ -437,27 +492,26 @@ impl Ast for IndexExpr {
         self.index.analyze_names(na);
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<TypeNode> {
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let ptr_ty = self.ptr.typecheck(tc)?.clone();
         let index_ty = self.index.typecheck(tc)?;
-        if let TypeNode::Reference(ref r) = ptr_ty {
-            self.is_ptr.set(true);
+        if let Type::Reference(ref r) = ptr_ty {
+            self.is_ptr.set(true).unwrap();
         } else {
-            self.is_ptr.set(false);
+            self.is_ptr.set(false).unwrap();
         }
-        if let TypeNode::Reference(ref r) | TypeNode::Array(ref r, _) = ptr_ty {
-            if index_ty != TypeNode::Int {
+        if let Type::Reference(ref r) | Type::Array(ref r, _) = ptr_ty {
+            if index_ty != Type::Int {
                 tc.raise_error(
                     self.index.clone(),
                     "Indices of an array or pointer must be integers".into()
                 );
             }
-            tc.cache_type(&(self.ptr.clone() as _), r);
+            tc.cache_type(self, r);
             // --- BEGIN CHANGES ---
             // Added: Store the inner type for use in codegen.
             // This ensures we can check for TypeNode::Char later to choose the correct load instruction.
             let inner_ty = r.as_ref().clone();
-            self.ty.set(inner_ty.clone()).unwrap();
             // Updated: Return inner_ty to keep original behavior while storing it.
             Some(inner_ty)
             // --- END CHANGES ---
@@ -472,7 +526,7 @@ impl Ast for IndexExpr {
     }
 
     fn codegen_lvalue(&self, cg: &mut Codegen) {
-        let ty = cg.type_cache.get(&(self.ptr.clone() as Rc<dyn Ast + 'static>)).unwrap();
+        let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
         dbg!(ty_size);
         if *self.is_ptr.get().unwrap() {
@@ -490,7 +544,7 @@ impl Ast for IndexExpr {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        let ty = cg.type_cache.get(&(self.ptr.clone() as Rc<dyn Ast + 'static>)).unwrap();
+        let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
         let load_ins = match ty_size {
             1 => "lb",

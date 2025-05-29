@@ -40,142 +40,109 @@ DeclOrStmt -> Result<DeclOrStmt, ()>
   ;
 
 Decl -> Result<BoxDecl, ()>
-  : StructDecl { $1.map(box_decl) }
-  | VarDecl { $1.map(box_decl) }
-  | FunDecl { $1.map(box_decl) }
+  : StructDecl { $1 }
+  | VarDecl { $1 }
+  | FunDecl { $1 }
   ;
 
-VarDecl -> Result<VarDecl, ()>
-  : Type Id ';' { Ok(VarDecl {ty: $1?, id: $2?, init: None, sym: OnceCell::new() }) }
-  | Type Id '=' Expr ';' { Ok(VarDecl {ty: $1?, id: $2?, init: Some($4?), sym: OnceCell::new() })}
+VarDecl -> Result<BoxDecl, ()>
+  : Type Id ';' { Ok(VarDecl::new($1?, $2?, None))}
+  | Type Id '=' Expr ';' { Ok(VarDecl::new($1?, $2?, Some($4?)))}
   ;
 
-StructDecl -> Result<StructDecl, ()>
-  : 'STRUCT' Id '{' DeclList '}' { Ok(StructDecl {id: $2?, decls: $4?, scope: OnceCell::new() }) }
+StructDecl -> Result<BoxDecl, ()>
+  : 'STRUCT' Id '{' DeclList '}' { Ok(StructDecl::new($2?, $4?)) }
   ;
 
-FunDecl -> Result<FunDecl, ()>
+FunDecl -> Result<BoxDecl, ()>
   : 'FUN' Id FunFormals FunOutput ScopeBlock 
   {
-    Ok(FunDecl {
-      id: $2?,
-      formals: FormalsList { list: $3? },
-      ret_ty: $4?,
-      body: Some($5?),
-      frame_size: OnceCell::new(),
-    })
+    Ok(FunDecl::new($2?, $4?, $3?, Some($5?)))
   }
   | 'FUN' Id FunFormals FunOutput ';' {
-    Ok(FunDecl {
-      id: $2?,
-      formals: FormalsList { list: $3? },
-      ret_ty: $4?,
-      body: None,
-      frame_size: OnceCell::new(),
-    })
+    Ok(FunDecl::new($2?, $4?, $3?, None))
   }
   ;
 
-FunOutput -> Result<TypeNode, ()>
+FunOutput -> Result<Type, ()>
   : 'ARROW' Type { $2 }
-  | { Ok(TypeNode::Void) }
+  | { Ok(Type::Void) }
   ;
 
-FunFormals -> Result<Vec<FormalParam>, ()>
+FunFormals -> Result<Vec<Rc<FormalParam>>, ()>
   : '(' ')' { Ok(vec![]) }
   | '(' FormalsList ')' { $2 }
   ;
 
-FormalParam -> Result<FormalParam, ()>
-  : Type Id { Ok(FormalParam {ty: $1?, id: $2?}) }
+FormalParam -> Result<Rc<FormalParam>, ()>
+  : Type Id { Ok(FormalParam::new($1?, $2?)) }
   | 'SELF_PARAM' 
   { 
     let span = $1.map_err(|_| ())?.span();
     let ((line, col), _) = $lexer.line_col(span);
-    Ok(FormalParam {
-      ty: TypeNode::SelfRef, 
-      id: IdNode { 
-        span, line, col, sym: OnceCell::new() 
-      } 
-    })
+    let id = Id::new(span, line, col);
+    Ok(FormalParam::new(Type::SelfRef, id.into()))
   }
   ;
 
-FormalsList -> Result<Vec<FormalParam>, ()>
+FormalsList -> Result<Vec<Rc<FormalParam>>, ()>
   : FormalsList ',' FormalParam { flatten($1, $3) }
   | FormalParam { Ok(vec![$1?]) }
   ;
 
-Id -> Result<IdNode, ()>
+Id -> Result<Rc<Id>, ()>
   : 'ID' 
   { 
     let span = $1.map_err(|_| ())?.span();
     let ((line, col), _) = $lexer.line_col(span);
-    Ok(IdNode {
-      span, 
-      sym: OnceCell::new(),
-      line,
-      col
-    })
+    Ok(Id::new(span, line, col)) 
   }
-  | 'SELF_PARAM' 
-  { 
-    let span = $1.map_err(|_| ())?.span();
-    let ((line, col), _) = $lexer.line_col(span);
-    Ok(IdNode {
-      span, 
-      sym: OnceCell::new(),
-      line,
-      col
-    })
-  }
-
   ;
 
-Type -> Result<TypeNode, ()>:
-    'STRUCT' Id { Ok(TypeNode::Struct($2?, OnceCell::new())) }
-  | 'VOID' { Ok(TypeNode::Void) }
-  | 'PRIM_INT' { Ok(TypeNode::Int) }
-  | 'PRIM_BOOL' { Ok(TypeNode::Bool) }
-  | 'PRIM_CHAR' { Ok(TypeNode::Char) }
-  | 'PRIM_DOUBLE' { Ok(TypeNode::Double) }
-  | Type '*' { Ok(TypeNode::Reference(Rc::new($1?))) }
-  | Type '[' U32Lit ']' { Ok(TypeNode::Array(Rc::new($1?), $3?)) }
+Type -> Result<Type, ()>:
+    'STRUCT' Id { Ok(Type::Struct($2?, OnceCell::new())) }
+  | 'VOID' { Ok(Type::Void) }
+  | 'PRIM_INT' { Ok(Type::Int) }
+  | 'PRIM_BOOL' { Ok(Type::Bool) }
+  | 'PRIM_CHAR' { Ok(Type::Char) }
+  | 'PRIM_DOUBLE' { Ok(Type::Double) }
+  | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
+  | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
   ;
 
 Stmt -> Result<BoxStmt, ()>
-  : IfStmt { $1.map(box_stmt) }
-  | IfElseStmt { $1.map(box_stmt) }
-  | ReturnStmt { $1.map(box_stmt) }
-  | WhileStmt { $1.map(box_stmt) }
-  | Expr ';' { Ok(box_stmt(ExprStmt {expr: $1?})) }
+  : IfStmt { $1 }
+  | IfElseStmt { $1 }
+  | ReturnStmt { $1 }
+  | WhileStmt { $1 }
+  | Expr ';' { Ok(ExprStmt::new($1?)) }
   | 'OUT' 'LARROW' Expr ';' { Ok(box_stmt(OutputStmt {expr: $3?})) }
   | 'IN' 'ARROW' Loc ';' { Ok(box_stmt(InputStmt {loc: $3?})) }
   ;
 
-ReturnStmt -> Result<ReturnStmt, ()>
-  : 'RETURN' Expr ';' { Ok(ReturnStmt {expr: Some($2?)}) }
-  | 'RETURN' ';' { Ok(ReturnStmt {expr: None}) }
+ReturnStmt -> Result<BoxStmt, ()>
+  : 'RETURN' Expr ';' { Ok(ReturnStmt::new(Some($2?))) }
+  | 'RETURN' ';' { Ok(ReturnStmt::new(None)) }
   ;
 
-IfStmt -> Result<IfStmt, ()>
+IfStmt -> Result<BoxStmt, ()>
   : 'IF' Expr ScopeBlock
   {
-    Ok(IfStmt { cond: $2?, body: $3? })
+    Ok(IfStmt::new($2?, $3?))
   }
   ;
 
-IfElseStmt -> Result<IfElseStmt, ()>
+IfElseStmt -> Result<BoxStmt, ()>
   : 'IF' Expr ScopeBlock 'ELSE' ScopeBlock
   {
-    Ok(IfElseStmt {cond: $2?, then_body: $3?, else_body: $5?})
+    Ok(IfElseStmt::new($2?, $3?, $5?))
   }
   ;
 
-WhileStmt -> Result<WhileStmt, ()>
+WhileStmt -> Result<BoxStmt, ()>
   : 'WHILE' Expr ScopeBlock
   {
-    Ok(WhileStmt {cond: $2?, body: $3?})
+    Ok(WhileStmt::new($2?, $3?))
   }
   ;
 
@@ -193,8 +160,8 @@ ExprList -> Result<Vec<Boxpr>, ()>
 
 Expr -> Result<Boxpr, ()>
   : NAExpr { $1 }
-  | AssignExpr { Ok(box_expr($1?)) } 
-  | '&' NAExpr { Ok(box_expr(AddrExpr {expr: $2?})) }
+  | AssignExpr { $1 } 
+  | '&' NAExpr { Ok(AddrExpr::new($2?)) }
   ;
 
 NAExpr -> Result<Boxpr, ()>
@@ -220,26 +187,23 @@ NAExpr -> Result<Boxpr, ()>
   | NAExpr '|' NAExpr { Ok(box_expr(BitwiseOr {lhs: $1?, rhs: $3?})) }
   | NAExpr '&' NAExpr { Ok(box_expr(BitwiseAnd {lhs: $1?, rhs: $3?})) }
   | '(' Expr ')' { Ok($2?) }
-  | Loc '(' ExprList ')' { Ok(box_expr(CallExpr {fun: $1?, args: $3?, fun_sym: OnceCell::new()}))}
-  | Loc '(' ')' { Ok(box_expr(CallExpr {fun: $1?, args: vec![], fun_sym: OnceCell::new()}))}
+  | Loc '(' ExprList ')' { Ok(CallExpr::new($1?, $3?))}
+  | Loc '(' ')' { Ok(CallExpr::new($1?, vec![]))}
   | '-' NAExpr { Ok(box_expr(NegExpr {expr: $2?})) }
   | '!' NAExpr { Ok(box_expr(NotExpr {expr: $2?})) }
   ;
 
 Loc -> Result<BoxLoc, ()>
-  : Id { $1.map(box_loc) }
-  | NAExpr '.' Id { Ok(box_loc(AccessExpr {obj: $1?, field: $3?, sym: OnceCell::new()})) }
+  : Id { Ok(($1? as Rc<dyn Loc>).clone()) }
+  | NAExpr '.' Id { Ok(AccessExpr::new($1?, $3?)) }
   | '*' NAExpr { Ok(DerefExpr::new($2?)) }
-  | NAExpr '[' Expr ']' { Ok(box_loc(IndexExpr {
-    ptr: $1?,
-    index: $3?,
-    is_ptr: OnceCell::new(),
-    ty: OnceCell::new()
-  }))}
+  | NAExpr '[' Expr ']' { Ok(IndexExpr::new_loc( $1?, $3?,) as Rc<dyn Loc>)}
   ;
 
-AssignExpr -> Result<AssignExpr, ()>
-  : Loc '=' Expr { Ok(AssignExpr { loc: $1?, value: $3?, ty: OnceCell::new()}) }
+AssignExpr -> Result<Boxpr, ()>
+  : Loc '=' Expr {
+    Ok(AssignExpr::new($1?, $3?))
+  }
   ;
 
 IntLit -> Result<IntLit, ()>

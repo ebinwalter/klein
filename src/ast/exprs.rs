@@ -546,7 +546,6 @@ impl Ast for IndexExpr {
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
-        dbg!(ty_size);
         if *self.is_ptr.get().unwrap() {
             self.ptr.codegen(cg);   
         } else {

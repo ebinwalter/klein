@@ -300,8 +300,12 @@ impl Ast for AccessExpr {
     }
 
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
-        let obj_ty = self.obj.typecheck(tc);
-        if let Some(Type::Struct(_, sym)) = obj_ty {
+        let obj_ty = self.obj.typecheck(tc)?;
+        if let ref x@Type::Struct(_, ref sym) 
+             | ref x@Type::Reference(deref!(Type::Struct(_, ref sym))) 
+             = obj_ty 
+        {
+            tc.cache_type(&*self.obj, &x);
             let struct_sym = sym.get()
                 .unwrap();
             let struct_scope = struct_sym.scope.try_borrow()
@@ -320,12 +324,17 @@ impl Ast for AccessExpr {
                 self.field.set_sym(sym_rc.clone());
                 let b = (*v.ty).clone();
                 self.sym.set(sym_rc.clone()).unwrap();
-                return Some(b)
+                Some(b)
+            } else {
+                tc.raise_error(self.field.clone(), "field not a part of struct".into());
+                None
             }
         } else {
-            tc.raise_error(self.obj.clone(), "Attempt to access a field of a non-struct".into());
+            let m = "Attempt to access a field of something which was not \
+                a struct or a pointer to a struct";
+            tc.raise_error(self.obj.clone(), m.into());
+            None
         }
-        None
     }
 
     fn symbol_rc(&self) -> Option<Rc<Symbol>> {
@@ -344,7 +353,11 @@ impl Ast for AccessExpr {
         let field_sym = self.field.sym.get().unwrap();
         let Symbol::Var(ref vs) = **field_sym else { panic!() };
         let offset = vs.offset.get().unwrap();
-        self.obj.codegen_lvalue(cg);
+        if let Some(Type::Reference(_)) = cg.type_cache.get(&*self.obj) {
+            self.obj.codegen(cg);
+        } else {
+            self.obj.codegen_lvalue(cg);
+        }
         cg.emit_pop(CG::T0);
         // --- BEGIN CHANGES ---
         // Added: Check the field's type to choose 'lb' for char (1-byte) or 'lw' for others.

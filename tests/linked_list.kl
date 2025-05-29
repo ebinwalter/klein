@@ -21,7 +21,7 @@ fun main() {
   int count = 0;
   struct LinkedList *current = &ll_heap[0];
   while current != null {
-    current = (*current).next;
+    current = current.next;
     count = count + 1;
   }
   count_1 = count;
@@ -32,9 +32,9 @@ fun main() {
   current = &ll_heap[0];
   int item;
   while current != null {
-    item = (*current).item;
+    item = current.item;
     sum = sum + item;
-    current = (*current).next;
+    current = current.next;
     count = count + 1;
   }
   sum_2 = sum;

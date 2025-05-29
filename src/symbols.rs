@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::cell::{RefCell, OnceCell};
 use std::borrow::{Borrow, BorrowMut};
 use std::iter::Iterator;
-use crate::ast::{FunDecl};
+use crate::ast::{FunDecl, Type};
 
 use lrpar::Span;
 

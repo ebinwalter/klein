@@ -48,7 +48,7 @@ impl<T> Ast for T
         tc.cache_type(lhs_ast.as_ref(), &t_lhs.clone());
         match Self::OP_TYPE {
             OpType::Numeric => {
-                if !matches!(t_lhs, Type::Int | Type::Double) {
+                if !matches!(t_lhs, Type::Int | Type::Double | Type::Char) {
                     let m = format!(
                         "{} is a numeric operator which only takes ints or \
                         doubles as operands",
@@ -71,8 +71,9 @@ impl<T> Ast for T
                 if t_lhs != t_rhs {
                     let m = format!(
                         "{} is a relational operator whose operands must be of \
-                        the same type",
-                        Self::SYMBOL
+                        the same type (got {} and {})",
+                        Self::SYMBOL,
+                        t_lhs, t_rhs,
                     );
                     tc.raise_error(rhs.clone(), m);
                 }
@@ -83,9 +84,9 @@ impl<T> Ast for T
                 Some(Type::Bool)
             }
             OpType::NumericRelational => {
-                if !matches!(t_lhs, Type::Int | Type::Double) {
+                if !matches!(t_lhs, Type::Int | Type::Double | Type::Char) {
                     let m = format!(
-                        "{} is a numeric relational operator which only takes ints or \
+                        "{} is a numeric relational operator which only takes ints, chars or \
                         doubles as operands",
                         Self::SYMBOL
                     );

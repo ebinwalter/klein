@@ -121,14 +121,18 @@ impl Expr for BoolLit {}
 
 pub struct CharLit {
     span: Span,
-    value: OnceCell<u8>
+    value: OnceCell<u8>,
+    line: usize,
+    col: usize,
 }
 
 impl CharLit {
-    pub fn new(span: Span) -> Self {
+    pub fn new(span: Span, line: usize, col: usize) -> Self {
         CharLit {
             span,
             value: OnceCell::new(),
+            line,
+            col
         }
     }
 }
@@ -152,6 +156,8 @@ impl Ast for CharLit {
                     't' => 9,
                     'r' => 13,
                     'b' => 8,
+                    '\\' => 92,
+                    '\'' => 39,
                     x => {
                         na.raise_error(self, format!("invalid escape \\{x}"));
                         return;
@@ -162,6 +168,10 @@ impl Ast for CharLit {
         } else {
             self.value.set(a.as_bytes()[0]);
         }
+    }
+
+    fn code_location(&self) -> Option<(usize, usize)> {
+        Some((self.line, self.col))
     }
 
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {

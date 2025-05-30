@@ -205,7 +205,8 @@ Loc -> Result<BoxLoc, ()>
 CharLit -> Result<CharLit, ()>
   : 'CHARLIT' {
     let span = $1.map_err(|_|())?.span();
-    Ok(CharLit::new(span))
+    let ((line, col), _) = $lexer.line_col(span);
+    Ok(CharLit::new(span, line, col))
   }
   ;
 

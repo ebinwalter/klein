@@ -50,8 +50,8 @@ VarDecl -> Result<BoxDecl, ()>
   | Type Id '=' Expr ';' { Ok(VarDecl::new($1?, $2?, Some($4?)))}
   ;
 
-StructDecl -> Result<BoxDecl, ()>
-  : 'STRUCT' Id '{' DeclList '}' { Ok(StructDecl::new($2?, $4?)) }
+StructDecl -> Result<BoxDecl, ()>: 
+  'STRUCT' Id '{' DeclList '}' { Ok(StructDecl::new($2?, $4?)) }
   ;
 
 FunDecl -> Result<BoxDecl, ()>
@@ -169,6 +169,7 @@ NAExpr -> Result<Boxpr, ()>
     Ok($1? as Boxpr)
   }
   | 'PRIM_NULL' { Ok(box_expr(NullLit)) }
+  | CharLit { $1.map(box_expr) }
   | IntLit { $1.map(box_expr) }
   | StringLit { $1.map(box_expr) }
   | BoolLit { $1.map(box_expr) }
@@ -199,6 +200,13 @@ Loc -> Result<BoxLoc, ()>
   | NAExpr '.' Id { Ok(AccessExpr::new($1?, $3?)) }
   | '*' NAExpr { Ok(DerefExpr::new($2?)) }
   | NAExpr '[' Expr ']' { Ok(IndexExpr::new_loc( $1?, $3?,) as Rc<dyn Loc>)}
+  ;
+
+CharLit -> Result<CharLit, ()>
+  : 'CHARLIT' {
+    let span = $1.map_err(|_|())?.span();
+    Ok(CharLit::new(span))
+  }
   ;
 
 AssignExpr -> Result<Boxpr, ()>

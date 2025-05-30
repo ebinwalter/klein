@@ -119,6 +119,63 @@ impl Ast for BoolLit {
 
 impl Expr for BoolLit {}
 
+pub struct CharLit {
+    span: Span,
+    value: OnceCell<u8>
+}
+
+impl CharLit {
+    pub fn new(span: Span) -> Self {
+        CharLit {
+            span,
+            value: OnceCell::new(),
+        }
+    }
+}
+
+impl Ast for CharLit {
+    fn unparse(&self, up: &mut Unparser) {
+        up.write_span(self.span);
+    }
+
+    fn analyze_names(&self, na: NACtx) {
+        let lit_str = span_to_str(&self.span, na.ref_text);
+        let char_str = &lit_str[1..lit_str.len()-1];
+        let (a, b) = char_str.split_at(1);
+        if a.chars().nth(0).unwrap() == '\\' {
+            if let Ok(n) = b.parse::<u8>() {
+                self.value.set(n);
+            } else {
+                // Escapes taken from https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b
+                let ch = match b.chars().nth(0).unwrap() {
+                    'n' => 10,
+                    't' => 9,
+                    'r' => 13,
+                    'b' => 8,
+                    x => {
+                        na.raise_error(self, format!("invalid escape \\{x}"));
+                        return;
+                    }
+                };
+                self.value.set(ch);
+            }
+        } else {
+            self.value.set(a.as_bytes()[0]);
+        }
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        return Some(Type::Char)
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        cg.emit(("li", CG::T0, *self.value.get().unwrap() as u32));
+        cg.emit_push(CG::T0);
+    }
+}
+
+impl Expr for CharLit {}
+
 pub struct AssignExpr {
     pub loc: BoxLoc,
     pub value: Boxpr,

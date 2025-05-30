@@ -51,6 +51,7 @@ false "FALSE"
 variant "VARIANT"
 [_a-zA-Z][_a-zA-Z0-9]* "ID"
 \"(\\.|[^\\\"\n])*\" "STRINGLIT"
+\'([^\\']|\\(n|t|s|\\|[0-9]+))\' "CHARLIT"
 [\t \n]+ ;
 \/\/[^\n]* ;
 [0-9]+ "INT"

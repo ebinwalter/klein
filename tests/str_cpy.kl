@@ -10,16 +10,16 @@ fun strcpy(char *dest, char *src) {
 // Requires char literals to compile
 fun strncpy(char *dest, char *src, int n) {
   int ix = 0;
-  while src[ix] != ""[0] {
+  while src[ix] != '\0' {
     if ix < n - 1 {
       dest[ix] = src[ix];
     }
     ix = ix + 1;
   }
-  dest[ix] = ""[0];
+  dest[ix] = '\0';
 }
 
-// Requires char arithmetic to be able to compile
+// Requires char comparisons to be able to compile
 fun strcmp(char *s1, char *s2) -> int {
   int i = 0;
   while s1[i] != ""[0] {
@@ -53,12 +53,10 @@ fun strlen(char *s) -> int {
 
 int cmp1;
 int cmp2;
-char[20] output;
 
 // assumes head has enough space to accommodate tail
 fun strcat(char *head, char *tail) {
   int len = strlen(head);
-  cmp1 = len;
   int i = 0;
   while tail[i] != ""[0] {
     head[len+i] = tail[i];
@@ -67,17 +65,16 @@ fun strcat(char *head, char *tail) {
   head[len+i] = ""[0];
 }
 
+char[20] snup_buf;
+char[20] usual_buf;
 
 fun main() {
-  char[20] snup_buf;
-  char[20] usual_buf;
   char *snupis = &snup_buf[0];
   char *usual = &usual_buf[0];
-  strcpy(snupis, "Snupingas");
-  strcpy(usual, "Usual");
-  strcpy(snupis, usual);
-  strcpy(&output[0], usual);
-  strcat(&output[0], usual);
-  cmp1 = 5;
-  cmp2 = strlen(usual);
+  cmp1 = strlen("Hflonger");
+  strcpy(snupis, "snoopingas");
+  strcpy(usual, "usual icy");
+  strcat(snupis, usual);
+  strcat(snupis, "\n");
+  out <- snupis;
 }

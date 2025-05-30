@@ -267,6 +267,9 @@ impl Ast for CallExpr {
         cg.emit_pop(CG::T0);
         cg.emit(("jr", CG::T0));
         cg.emit(Label(return_label));
+        for _arg in self.args.iter().rev() {
+            cg.emit_pop(CG::ZERO)
+        }
         cg.emit_push(CG::V0);
     }
 }

@@ -270,9 +270,17 @@ impl Ast for InputStmt {
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         use Type::*;
         let loc_type = self.loc.typecheck(tc)?;
+        tc.cache_type(&*self.loc, &loc_type);
         match loc_type {
             Int | Bool | Char  => (),
-            Reference(t) if matches!(*t, Char) => (),
+            Array(deref!(Type::Char), _) => (),
+            Reference(t) if matches!(*t, Char) => {
+                tc.raise_error(
+                    self.loc.clone(),
+                    "String input is only supported for buffers with a statically known size\n\
+                    \tnote: If you want to store a user string in dynamic memory, create an array of characters, take input there, and then copy out the data read in by the syscall".into()
+                );
+            },
             _ => {
                 tc.raise_error(
                     self.loc.clone(),
@@ -282,6 +290,20 @@ impl Ast for InputStmt {
             }
         }
         None
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        let loc_type = cg.type_cache.get(&*self.loc).unwrap();
+        match loc_type {
+            Type::Int => {
+                self.loc.codegen_lvalue(cg);
+                cg.emit(("li", CG::V0, 5));
+                cg.emit("syscall");
+                cg.emit_pop(CG::T0);
+                cg.emit(("sw", CG::V0, CG::T0, Ix(0)));
+            },
+            _ => unimplemented!(),
+        }
     }
 }
 
@@ -314,9 +336,11 @@ impl Ast for OutputStmt {
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         use Type::*;
         let expr_type = self.expr.typecheck(tc)?;
+        tc.cache_type(&*self.expr, &expr_type);
         match expr_type {
             Int | Bool | Char  => (),
-            Reference(t) if matches!(*t, Char) => (),
+            Reference(deref!(Type::Char)) => (),
+            Array(deref!(Type::Char), _) => (),
             _ => {
                 tc.raise_error(self.expr.clone(),
                     "Output is only supported for integers, booleans, characters \
@@ -324,6 +348,18 @@ impl Ast for OutputStmt {
             }
         }
         None
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        match cg.type_cache.get(&*self.expr).unwrap() {
+            Type::Int => {
+                self.expr.codegen(cg);
+                cg.emit_pop(CG::A0);
+                cg.emit(("li", CG::V0, 1));
+                cg.emit("syscall");
+            },
+            _ => unimplemented!(),
+        }
     }
 }
 

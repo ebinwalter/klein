@@ -278,7 +278,8 @@ impl Ast for InputStmt {
                 tc.raise_error(
                     self.loc.clone(),
                     "String input is only supported for buffers with a statically known size\n\
-                    \tnote: If you want to store a user string in dynamic memory, create an array of characters, take input there, and then copy out the data read in by the syscall".into()
+                    \tnote: If you want to store a user string in dynamic memory, create an array of characters, take input there, \n\
+                    \tand then copy out the data read in by the syscall".into()
                 );
             },
             _ => {

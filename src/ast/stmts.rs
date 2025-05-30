@@ -302,6 +302,13 @@ impl Ast for InputStmt {
                 cg.emit_pop(CG::T0);
                 cg.emit(("sw", CG::V0, CG::T0, Ix(0)));
             },
+            Type::Char => {
+                self.loc.codegen_lvalue(cg);
+                cg.emit(("li", CG::V0, 12));
+                cg.emit("syscall");
+                cg.emit_pop(CG::T0);
+                cg.emit(("sb", CG::V0, CG::T0, Ix(0)));
+            }
             _ => unimplemented!(),
         }
     }
@@ -356,6 +363,12 @@ impl Ast for OutputStmt {
                 self.expr.codegen(cg);
                 cg.emit_pop(CG::A0);
                 cg.emit(("li", CG::V0, 1));
+                cg.emit("syscall");
+            },
+            Type::Char => {
+                self.expr.codegen(cg);
+                cg.emit_pop(CG::A0);
+                cg.emit(("li", CG::V0, 11));
                 cg.emit("syscall");
             },
             _ => unimplemented!(),

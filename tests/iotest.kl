@@ -1,5 +1,8 @@
 fun main() {
+  char one_char;
   int i;
   in -> i;
   out <- i;
+  in -> one_char;
+  out <- one_char;
 }

@@ -223,10 +223,85 @@ impl OffsetsContext {
     }
     /// Ends a frame created by `start_frame`.
     pub fn end_frame(&mut self) -> u32 {
-        let out = self.aligner.next_offset;
+        let mut out = self.aligner.next_offset;
+        // Adjust so frame size is word-aligned
+        if out % 4 != 0 {
+            // + because out is negative
+            let extra = 4 + (out % 4);
+            out -= extra;
+        }
         self.aligner.next_offset = self.offset_stack.pop().unwrap();
         (-out).try_into().unwrap()
     }
 }
 
 pub type OCtx<'a> = &'a mut OffsetsContext;
+
+pub struct Aligner {
+    next_offset: i32,
+    grow_downward: bool,
+    min_alignment: i32
+}
+
+impl Aligner {
+    pub fn new(start: i32, min_alignment: i32) -> Self {
+        Aligner {
+            next_offset: start,
+            grow_downward: false,
+            min_alignment
+        }
+    }
+    pub fn new_downward(start: i32, min_alignment: i32) -> Self {
+        Aligner {
+            next_offset: start,
+            grow_downward: true,
+            min_alignment
+        }
+    }
+    pub fn place(&mut self, bytes: u32) -> i32 {
+        let alignment = match bytes {
+            0 => unreachable!(),
+            1 => 1,
+            2 => 2,
+            _x => 4
+        }.max(self.min_alignment);
+        let bytes = bytes as i32;
+        if self.grow_downward {
+            if self.next_offset % alignment != 0 {
+                self.next_offset -= alignment + self.next_offset % alignment;
+            }
+            let old = self.next_offset;
+            self.next_offset -= bytes;
+            old
+        } else {
+            if self.next_offset % alignment != 0 {
+                self.next_offset += alignment - self.next_offset % alignment;
+            }
+            let old = self.next_offset;
+            self.next_offset += bytes;
+            old
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn aligner_test() {
+    let mut a = Aligner::new(4, 1);
+    assert_eq!(a.place(1), 4);
+    assert_eq!(a.place(1), 5);
+    assert_eq!(a.place(1), 6);
+    assert_eq!(a.place(4), 8);
+    assert_eq!(a.place(4), 12);
+    assert_eq!(a.place(1), 16);
+
+    let mut b = Aligner::new_downward(-8, 1);
+    assert_eq!(b.place(4), -8);
+    assert_eq!(b.place(4), -12);
+    assert_eq!(b.place(2), -16);
+    assert_eq!(b.place(2), -18);
+    assert_eq!(b.place(1), -20);
+    assert_eq!(b.place(1), -21);
+    assert_eq!(b.place(2), -22);
+    assert_eq!(b.place(3), -24);
+}

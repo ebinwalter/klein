@@ -293,7 +293,7 @@ impl Ast for InputStmt {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        let loc_type = cg.type_cache.get(&*self.loc).unwrap();
+        let loc_type = cg.type_cache.get(&*self.loc).unwrap().clone();
         match loc_type {
             Type::Int => {
                 self.loc.codegen_lvalue(cg);
@@ -308,6 +308,13 @@ impl Ast for InputStmt {
                 cg.emit("syscall");
                 cg.emit_pop(CG::T0);
                 cg.emit(("sb", CG::V0, CG::T0, Ix(0)));
+            },
+            Type::Array(deref!(Type::Char), len) => {
+                self.loc.codegen_lvalue(cg);
+                cg.emit_pop(CG::A0);
+                cg.emit(("li", CG::V0, 8));
+                cg.emit(("li", "$a1", len));
+                cg.emit("syscall");
             }
             _ => unimplemented!(),
         }
@@ -369,6 +376,18 @@ impl Ast for OutputStmt {
                 self.expr.codegen(cg);
                 cg.emit_pop(CG::A0);
                 cg.emit(("li", CG::V0, 11));
+                cg.emit("syscall");
+            },
+            Type::Array(deref!(Type::Char), _) => {
+                self.expr.codegen_lvalue(cg);
+                cg.emit_pop(CG::A0);
+                cg.emit(("li", CG::V0, 4));
+                cg.emit("syscall");
+            },
+            Type::Reference(deref!(Type::Char)) => {
+                self.expr.codegen(cg);
+                cg.emit_pop(CG::A0);
+                cg.emit(("li", CG::V0, 4));
                 cg.emit("syscall");
             },
             _ => unimplemented!(),

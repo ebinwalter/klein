@@ -1,8 +1,12 @@
 fun main() {
   char one_char;
+  char[512] buf;
   int i;
   in -> i;
   out <- i;
   in -> one_char;
   out <- one_char;
+  in -> buf;
+  out <- buf;
+  out <- &buf[0];
 }

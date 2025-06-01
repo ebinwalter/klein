@@ -44,6 +44,13 @@ pub trait Ast {
     /// to call codegen_lvalue instead.
     fn codegen(&self, cg: &mut Codegen) {
     }
+    /// Returns a previously unused register that the emitted code stores its output in, if one
+    /// could be allocated.
+    /// If not, returns None, and the result should be assumed to be on the stack.
+    fn codegen_reg(&self, cg: &mut Codegen) -> Option<&'static str> {
+        self.codegen(cg);
+        None
+    }
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         // We've written things such that this should never happen.
         // But we should crash and burn if it does happen, because we need to

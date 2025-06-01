@@ -1,15 +1,24 @@
-use std::{collections::HashMap, io::Write};
+use std::{collections::{HashMap, HashSet}, hash::{DefaultHasher, Hasher}, io::Write};
 
 use lrpar::Span;
+
+pub struct HintResponse {
+    output_register: &'static str,
+    temporaries: Vec<&'static str>,
+}
 
 use crate::ast::TypeCache;
 pub struct Codegen<'a> {
     output: Box<dyn Write>,
+    emit_buffer: Option<Vec<String>>,
     next_label: usize,
     string_table: HashMap<String, String>,
     ref_text: &'a str,
+    hints: HashMap<u64, Option<HintResponse>>,
+    available_regs: Vec<&'static str>,
+    regs_used: HashSet<&'static str>,
     pub type_cache: TypeCache,
-    pub function_stack: Vec<String>
+    pub function_stack: Vec<String>,
 }
 
 impl<'a> Codegen<'a> {
@@ -33,13 +42,60 @@ impl<'a> Codegen<'a> {
             string_table: HashMap::new(),
             type_cache: cache,
             function_stack: Vec::new(),
+            emit_buffer: None,
+            available_regs: Vec::new(),
+            hints: HashMap::new(),
+            regs_used: HashSet::new(),
         }
     }
 
+    pub fn start_new_function(&mut self, name: String) {
+        self.function_stack.push(name);
+        self.available_regs = vec!["$t3", "$t4", "$t5", "$t6", "$t7"];
+        self.regs_used = HashSet::new();
+    }
+
+    pub fn end_function(&mut self) {
+        self.function_stack.pop();
+    }
+
+    pub fn take_storage_reg(&mut self) -> Option<&'static str> {
+        let r = self.available_regs.pop()?;
+        self.regs_used.insert(r);
+        Some(r)
+    }
+
+    pub fn get_regs_used(&self) -> Vec<&'static str> {
+        self.regs_used.iter()
+            .copied()
+            .collect()
+    }
+
+    pub fn relinquish_regs(&mut self, regs: &[&'static str]) {
+        self.available_regs.extend_from_slice(regs);
+    }
+
     pub fn emit(&mut self, what: impl Emittable) {
-        self.output
-            .write_all(what.emit().as_bytes())
-            .unwrap();
+        if let Some(ref mut buffer) = self.emit_buffer {
+            buffer.push(what.emit());
+        } else {
+            self.output
+                .write_all(what.emit().as_bytes())
+                .unwrap();
+        }
+    }
+
+    /// Delay the emission of a sequence of instructions.
+    /// To emit instructions delimited by `start_buffering` and `finish_buffering,`
+    /// call emit on the result of `finish_buffering`.
+    pub fn start_buffering(&mut self) {
+        self.emit_buffer = Some(Vec::new());
+    }
+
+    /// Terminates a sequence of instructions being recorded after
+    /// `start_buffering.`
+    pub fn finish_buffering(&mut self) -> Option<Vec<String>> {
+        self.emit_buffer.take()
     }
 
     pub fn next_label(&mut self) -> String {
@@ -206,3 +262,9 @@ impl Emittable for Directive {
 }
 
 pub struct Ix(pub i32);
+
+impl Emittable for Vec<String> {
+    fn emit(&self) -> String {
+        self.join("")
+    }
+}

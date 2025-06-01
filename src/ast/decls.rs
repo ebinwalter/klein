@@ -3,7 +3,7 @@ use super::*;
 pub struct StructDecl {
     pub id: Rc<Id>,
     pub decls: Vec<BoxDecl>,
-    pub scope: OnceCell<TableLayer>
+    pub scope: OnceCell<TableLayer>,
 }
 
 impl StructDecl {
@@ -298,21 +298,34 @@ impl Ast for FunDecl {
         } else {
             format!("_{}", f.id)
         };
-        cg.function_stack.push(name.clone());
         cg.emit(Directive::Text);
         // Preamble
         cg.emit(Label(&name));
         // Prologue (save old frame pointer, RA, etc.)
+        cg.start_new_function(name.clone());
         cg.emit_push(CG::RA);
         cg.emit_push(CG::FP);
         cg.emit(("addu", CG::FP, CG::SP, 8));
+        cg.start_buffering();
         // Make room on stack for top level variables in the frame
         let &frame_size = self.frame_size.get().unwrap();
         cg.emit(("subu", CG::SP, CG::SP, frame_size));
         for item in body.get_list().iter() {
             item.codegen(cg);
         }
+        let code = cg.finish_buffering().unwrap();
+        // Get a single ordering of all of the temp registers used in the
+        // function.
+        let regs_used = cg.get_regs_used();
+        for reg in regs_used.iter() {
+            cg.emit_push(reg);
+        }
+        cg.emit(code);
         cg.emit(Label(&format!("{name}_exit")));
+        for (ix, reg) in regs_used.iter().enumerate().rev() {
+            let offset = -4i32 * ix as i32 - 8;
+            cg.emit(("lw", *reg, CG::FP, Ix(offset)));
+        }
         cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
         cg.emit(("lw", CG::T0, CG::FP, Ix(-4)));
         cg.emit(("move", CG::SP, CG::FP));
@@ -323,6 +336,6 @@ impl Ast for FunDecl {
             cg.emit(("addi", CG::V0, CG::ZERO, 10));
             cg.emit("syscall");
         }
-        cg.function_stack.pop().unwrap();
+        cg.end_function();
     }
 }

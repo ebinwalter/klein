@@ -346,6 +346,19 @@ impl BinOp for LogicalOr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
+
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        let true_label = cg.next_label();
+        let false_label = cg.next_label();
+        self.lhs.codegen(cg);
+        cg.emit_pop(CG::T0);
+        cg.emit(("bne", CG::T0, CG::ZERO, Label(&true_label)));
+        self.rhs.codegen(cg);
+        cg.emit(("j", Label(&false_label)));
+        cg.emit(Label(&true_label));
+        cg.emit_push(CG::T0);
+        cg.emit(Label(&false_label));
+    }
 }
 
 pub struct LogicalAnd {
@@ -358,6 +371,18 @@ impl BinOp for LogicalAnd {
     const OP_TYPE: OpType = OpType::Logical;
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
+    }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        let true_label = cg.next_label();
+        let false_label = cg.next_label();
+        self.lhs.codegen(cg);
+        cg.emit_pop(CG::T0);
+        cg.emit(("beq", CG::T0, CG::ZERO, Label(&false_label)));
+        self.rhs.codegen(cg);
+        cg.emit(("j", Label(&true_label)));
+        cg.emit(Label(&false_label));
+        cg.emit_push(CG::T0);
+        cg.emit(Label(&true_label));
     }
 }
 
@@ -419,6 +444,9 @@ impl Ast for NegExpr {
 
     fn analyze_names(&self, na: NACtx) {
         self.expr.analyze_names(na);
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
     }
 }
 

@@ -433,6 +433,13 @@ impl Ast for NotExpr {
         self.expr.typecheck(tc);
         Some(Type::Bool)
     }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        self.expr.codegen(cg);
+        cg.emit_pop(CG::T0);
+        cg.emit(("slti", CG::T0, CG::T0, 1));
+        cg.emit_push(CG::T0);
+    }
 }
 
 impl Expr for NotExpr {}

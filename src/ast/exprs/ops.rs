@@ -346,10 +346,6 @@ impl BinOp for LogicalOr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
-    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
-        let (lhs, rhs) = self.operands();
-        lhs.codegen(cg);
-    }
 }
 
 pub struct LogicalAnd {
@@ -407,7 +403,6 @@ impl Ast for NotExpr {
     fn analyze_names(&self, na: NACtx) {
         self.expr.analyze_names(na);
     }
-
 }
 
 impl Expr for NotExpr {}

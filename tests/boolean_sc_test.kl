@@ -1,10 +1,16 @@
-fun crash_if_true(bool param) {
-  bool x = param and crash_if_true(param);
+fun crash_if_true(bool param) -> bool {
+  return param and crash_if_true(param);
 }
-fun crash_if_false(bool param) {
-  bool x = param or crash_if_false(param);
+fun crash_if_false(bool param) -> bool {
+  return param or crash_if_false(param);
 }
 fun main() {
   crash_if_true(false);
   crash_if_false(true);
+  crash_if_true(false and true);
+  crash_if_false(false or true);
+  int x = 5;
+  if x < 10 and x > 3 {
+    out <- "It works";
+  }
 }

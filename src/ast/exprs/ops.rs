@@ -403,6 +403,11 @@ impl Ast for NotExpr {
     fn analyze_names(&self, na: NACtx) {
         self.expr.analyze_names(na);
     }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        self.expr.typecheck(tc);
+        Some(Type::Bool)
+    }
 }
 
 impl Expr for NotExpr {}

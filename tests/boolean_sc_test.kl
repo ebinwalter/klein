@@ -10,7 +10,7 @@ fun main() {
   crash_if_true(false and true);
   crash_if_false(false or true);
   int x = 5;
-  if x < 10 and x > 3 {
+  if x < 10 and !(x < 3) {
     out <- "It works";
   }
 }

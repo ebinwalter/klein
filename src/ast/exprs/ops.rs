@@ -450,9 +450,6 @@ impl Ast for NegExpr {
     fn analyze_names(&self, na: NACtx) {
         self.expr.analyze_names(na);
     }
-
-    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
-    }
 }
 
 impl Expr for NegExpr {} 

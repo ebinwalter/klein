@@ -348,16 +348,22 @@ impl BinOp for LogicalOr {
     }
 
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        // Create labels to use based on the value of lhs
         let true_label = cg.next_label();
         let false_label = cg.next_label();
+        // Codegen wasn't handled for us automatically like in other BinOps
+        // Do it ourselves
         self.lhs.codegen(cg);
         cg.emit_pop(CG::T0);
+        // If the LHS's result was nonzero (i.e., true), jump to the true label
         cg.emit(("bne", CG::T0, CG::ZERO, Label(&true_label)));
         self.rhs.codegen(cg);
         cg.emit(("j", Label(&false_label)));
         cg.emit(Label(&true_label));
+        // Put that true value back onto the stack
         cg.emit_push(CG::T0);
         cg.emit(Label(&false_label));
+        // Exit evaluation
     }
 }
 
@@ -373,14 +379,19 @@ impl BinOp for LogicalAnd {
         (&self.lhs, &self.rhs)
     }
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        // Create labels to use depending on values of lhs
         let true_label = cg.next_label();
         let false_label = cg.next_label();
         self.lhs.codegen(cg);
         cg.emit_pop(CG::T0);
+        // If the lhs is false, the whole expression is false -- short-circuit to the end
         cg.emit(("beq", CG::T0, CG::ZERO, Label(&false_label)));
+        // Otherwise it takes on the value of RHS, so push that to the stack, and jump
+        // to the end of evaluation.
         self.rhs.codegen(cg);
         cg.emit(("j", Label(&true_label)));
         cg.emit(Label(&false_label));
+        // Push the false result we just branched because of back onto the stack.
         cg.emit_push(CG::T0);
         cg.emit(Label(&true_label));
     }

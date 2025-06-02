@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::io::stdout;
+use std::io::{stdout, BufWriter};
 use std::hash::Hash;
 use std::rc::Rc;
 use std::fmt::Write;
@@ -30,6 +30,11 @@ pub trait Ast {
     /// The completeness of the annotations depends on how many phases of
     /// compilation have been carried out.
     fn unparse(&self, up: Up);
+    fn unparse_to_string<'r>(&self, ref_text: &'r str) -> String {
+        let mut up = Unparser::new_buf(ref_text);
+        self.unparse(&mut up);
+        String::from_utf8(up.as_buf().unwrap()).unwrap()
+    }
     /// Record definitions and declarations in the symbol table and associate
     /// various parts of the AST that reference the same symbol.  Also,
     /// determine offsets of members from the base address of a struct.

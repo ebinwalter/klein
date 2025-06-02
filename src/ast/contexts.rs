@@ -1,6 +1,8 @@
 #[feature(never_type)]
 use lrpar::Span;
 use std::io::stdout;
+use std::io::Write;
+use std::ops::Deref;
 use std::ptr;
 use std::rc::Rc;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -14,45 +16,76 @@ use crate::ast::*;
 // concise.
 pub type Up<'a, 'b> = &'a mut Unparser<'b>;
 
+enum UnparserOutput {
+    Stdout(std::io::Stdout),
+    Vec(Vec<u8>)
+}
+
 pub struct Unparser<'a> {
-    out: Box<dyn std::io::Write>,
+    out: UnparserOutput,
     ref_text: &'a [u8],
     indent: usize,
 }
 
 impl<'a> Unparser<'a> {
-    pub fn new_stdout(ref_text: &'a str) -> Self {
+    pub fn new_stdout(ref_text: &'a str) -> Unparser<'a> {
         Unparser {
-            out: Box::new(stdout()),
+            out: UnparserOutput::Stdout(stdout()),
+            indent: 0,
+            ref_text: ref_text.as_bytes(),
+        }
+    }
+    
+    pub fn new_buf(ref_text: &'a str) -> Unparser<'a> {
+        Unparser {
+            out: UnparserOutput::Vec(Vec::new()),
             indent: 0,
             ref_text: ref_text.as_bytes(),
         }
     }
 
+    pub fn as_buf(self) -> Option<Vec<u8>> {
+        match self.out {
+            UnparserOutput::Stdout(_) => None,
+            UnparserOutput::Vec(v) => Some(v)
+        }
+    }
+
     pub fn write(&mut self, s: &str) {
-        let _ = self.out.write(s.as_bytes());
+        let to_write = s.as_bytes();
+        match self.out {
+            UnparserOutput::Vec(ref mut v) => v.extend_from_slice(to_write),
+            UnparserOutput::Stdout(ref mut s) => {
+                s.write(to_write).unwrap();
+            }
+        };
     }
 
     pub fn space(&mut self) {
-        let _ = self.out.write(" ".as_bytes());
+        self.write(" ");
     }
 
     pub fn new_line(&mut self) {
-        let _ = self.out.write("\n".as_bytes());
+        self.write("\n");
     }
 
     pub fn end_stmt(&mut self) {
-        let _ = self.out.write(";\n".as_bytes());
+        self.write(";\n");
     }
 
     pub fn write_span(&mut self, s: Span) {
         let to_write = &self.ref_text[s.start()..s.end()];
-        let _ = self.out.write(to_write);
+        match self.out {
+            UnparserOutput::Vec(ref mut v) => v.extend_from_slice(to_write),
+            UnparserOutput::Stdout(ref mut s) => {
+                s.write(to_write).unwrap();
+            }
+        };
     }
 
     pub fn write_indent(&mut self) {
         for _ in 0..self.indent {
-            let _ = self.out.write("  ".as_bytes());
+            let _ = self.write("  ");
         }
     }
 

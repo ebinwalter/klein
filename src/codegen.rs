@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, hash::{DefaultHasher, Hasher}, io::Write};
+use std::{collections::{HashMap, HashSet}, hash::{DefaultHasher, Hasher}, io::Write, rc::Rc, cell::RefCell};
 
 use lrpar::Span;
 
@@ -10,10 +10,11 @@ pub struct HintResponse {
 use crate::ast::TypeCache;
 pub struct Codegen<'a> {
     output: Box<dyn Write>,
-    emit_buffer: Option<Vec<String>>,
+    emit_buffer: Option<Vec<Box<dyn Emittable>>>,
     next_label: usize,
     string_table: HashMap<String, String>,
     ref_text: &'a str,
+    frame_base: Rc<RefCell<i32>>,
     hints: HashMap<u64, Option<HintResponse>>,
     available_regs: Vec<&'static str>,
     regs_used: HashSet<&'static str>,
@@ -41,12 +42,17 @@ impl<'a> Codegen<'a> {
             ref_text: text,
             string_table: HashMap::new(),
             type_cache: cache,
+            frame_base: Rc::new(0.into()),
             function_stack: Vec::new(),
             emit_buffer: None,
             available_regs: Vec::new(),
             hints: HashMap::new(),
             regs_used: HashSet::new(),
         }
+    }
+
+    pub fn set_frame_offset(&mut self, offset: i32) {
+        *self.frame_base.try_borrow_mut().unwrap() = offset;
     }
 
     pub fn start_new_function(&mut self, name: String) {
@@ -65,6 +71,14 @@ impl<'a> Codegen<'a> {
         Some(r)
     }
 
+    pub fn get_frame_ref(&mut self, offset: i32) -> IxRef {
+        IxRef(offset, self.frame_base.clone())
+    }
+
+    pub fn get_frame_imm(&mut self, offset: i32) -> RefImm {
+        RefImm(offset, self.frame_base.clone())
+    }
+
     pub fn get_regs_used(&self) -> Vec<&'static str> {
         self.regs_used.iter()
             .copied()
@@ -75,9 +89,9 @@ impl<'a> Codegen<'a> {
         self.available_regs.extend_from_slice(regs);
     }
 
-    pub fn emit(&mut self, what: impl Emittable) {
+    pub fn emit<'t, 's: 't, T: Emittable + 'static>(&'s mut self, what: T) {
         if let Some(ref mut buffer) = self.emit_buffer {
-            buffer.push(what.emit());
+            buffer.push(Box::new(what));
         } else {
             self.output
                 .write_all(what.emit().as_bytes())
@@ -94,7 +108,7 @@ impl<'a> Codegen<'a> {
 
     /// Terminates a sequence of instructions being recorded after
     /// `start_buffering.`
-    pub fn finish_buffering(&mut self) -> Option<Vec<String>> {
+    pub fn finish_buffering(&mut self) -> Option<Vec<Box<dyn Emittable>>> {
         self.emit_buffer.take()
     }
 
@@ -104,12 +118,12 @@ impl<'a> Codegen<'a> {
         format!("L{}", label)
     }
 
-    pub fn emit_push(&mut self, reg: &str) {
+    pub fn emit_push(&mut self, reg: &'static str) {
         self.emit(("sw", reg, Self::SP, Ix(0)));
         self.emit(("addiu", Self::SP, Self::SP, -4));
     }
 
-    pub fn emit_pop(&mut self, reg: &str) {
+    pub fn emit_pop(&mut self, reg: &'static str) {
         self.emit(("lw", reg, Self::SP, Ix(4)));
         self.emit(("addiu", Self::SP, Self::SP, 4));
     }
@@ -145,6 +159,9 @@ impl Drop for Codegen<'_> {
 
 pub type CG<'a> = Codegen<'a>;
 
+type Opcode = &'static str;
+type Reg = &'static str;
+
 pub trait Emittable {
     fn emit(&self) -> String;
 }
@@ -155,91 +172,109 @@ impl Emittable for Box<dyn Emittable> {
     }
 }
 
-impl Emittable for (&str, &str, &str) {
+impl Emittable for (Opcode, Reg, Reg) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
-impl<T: AsRef<str>> Emittable for (&str, Label<T>) {
+impl Emittable for (Opcode, Label) {
     fn emit(&self) -> String {
-        format!("\t{} {}\n", self.0, self.1.0.as_ref())
+        format!("\t{} {}\n", self.0, self.1.0)
     }
 } 
 
-impl<T: AsRef<str>> Emittable for (&str, &str, Label<T>) {
+impl Emittable for (Opcode, Reg, Label) {
     fn emit(&self) -> String {
-        format!("\t{} {}, {}\n", self.0, self.1, self.2.0.as_ref())
+        format!("\t{} {}, {}\n", self.0, self.1, self.2.0)
     }
 } 
 
-impl Emittable for (&str, &str, &str, i32) {
+impl Emittable for (Opcode, Reg, Reg, i32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
     }
 }
 
-impl Emittable for (&str, &str, i32) {
+impl Emittable for (Opcode, Reg, Reg, RefImm) {
+    fn emit(&self) -> String {
+        let ref_offset = *self.3.1.try_borrow().unwrap();
+        let regular_offset = self.3.0;
+        if regular_offset > 0 {
+            format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, regular_offset)
+        } else {
+            format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, ref_offset + regular_offset)
+        }
+    }
+}
+
+impl Emittable for (Opcode, Reg, i32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
-impl Emittable for (&str, &str, u32) {
+impl Emittable for (Opcode, Reg, u32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
-impl Emittable for (&str, &str, &str, Ix) {
+impl Emittable for (Opcode, Reg, Reg, Ix) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}({})\n", self.0, self.1, self.3.0, self.2)
     }
 }
 
-impl Emittable for (&str, &str, &str, u32) {
+impl<'a> Emittable for (Opcode, Reg, Reg, IxRef) {
+    fn emit(&self) -> String {
+        format!("\t{} {}, {}({})\n", self.0, self.1, self.3.0 + *self.3.1.try_borrow().unwrap(), self.2)
+    }
+}
+
+impl Emittable for (Opcode, Reg, Reg, u32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
     }
 }
 
-impl Emittable for (&str, &str, &str, &str) {
+impl Emittable for (Opcode, Reg, Reg, Reg) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
     }
 }
 
-impl<T: AsRef<str>> Emittable for (&str, &str, &str, Label<T>) {
+impl Emittable for (Opcode, Reg, Reg, Label) {
     fn emit(&self) -> String {
-        format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3.0.as_ref())
+        format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3.0)
     }
 }
 
-impl Emittable for (&str, &str) {
+impl Emittable for (Opcode, Reg) {
     fn emit(&self) -> String {
         format!("\t{} {}\n", self.0, self.1)
     }
 }
 
-impl Emittable for &str {
+impl Emittable for Opcode {
     fn emit(&self) -> String {
         format!("\t{self}\n")
     }
 }
 
-pub struct Comment<'a>(pub &'a str);
+pub struct Comment(pub String);
 
-impl Emittable for Comment<'_> {
+impl Emittable for Comment {
     fn emit(&self) -> String {
         format!("\t# {}\n", self.0)
     }
 }
 
-pub struct Label<T: AsRef<str>>(pub T);
+pub struct Label(pub String);
 
-impl<T: AsRef<str>> Emittable for Label<T> {
+impl Emittable for Label {
     fn emit(&self) -> String {
-        format!("{}:\n", self.0.as_ref())
+        format!("{}:\n", self.0)
     }
 }
 
@@ -263,8 +298,15 @@ impl Emittable for Directive {
 
 pub struct Ix(pub i32);
 
-impl Emittable for Vec<String> {
+pub struct IxRef(pub i32, Rc<RefCell<i32>>);
+
+pub struct RefImm(pub i32, Rc<RefCell<i32>>);
+
+impl Emittable for Vec<Box<dyn Emittable>> {
     fn emit(&self) -> String {
-        self.join("")
+        self.iter()
+            .map(Emittable::emit)
+            .collect::<Vec<_>>()
+            .join("")
     }
 }

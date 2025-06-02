@@ -424,11 +424,12 @@ impl Ast for Id {
                     _ => todo!()
                 };
                 if is_global {
-                    cg.emit(Comment(&format!("Pushing value of global variable {}", v.id)));
+                    cg.emit(Comment(format!("Pushing value of global variable {}", v.id)));
                     cg.emit((load_ins, CG::T0, Label(format!("_{}", v.id))));
                 } else {
-                    cg.emit(Comment(&format!("Pushing value of local variable {}", v.id)));
-                    cg.emit((load_ins, CG::T0, CG::FP, Ix(*v.offset.get().unwrap())));
+                    cg.emit(Comment(format!("Pushing value of local variable {}", v.id)));
+                    let fr = cg.get_frame_ref(*v.offset.get().unwrap());
+                    cg.emit((load_ins, CG::T0, CG::FP, fr));
                 }
                 cg.emit_push(CG::T0);
             },
@@ -444,11 +445,12 @@ impl Ast for Id {
         let sym = self.sym.get().unwrap().clone();
         let Symbol::Var(ref v) = *sym else { return };
         if *v.global.get().unwrap() {
-            cg.emit(Comment(&format!("Pushing addr of global variable {}", v.id)));
+            cg.emit(Comment(format!("Pushing addr of global variable {}", v.id)));
             cg.emit(("la", CG::T0, Label(format!("_{}", v.id))));
         } else {
-            cg.emit(Comment(&format!("Pushing addr of local variable {}", v.id)));
-            cg.emit(("addiu", CG::T0, CG::FP, *v.offset.get().unwrap()));
+            cg.emit(Comment(format!("Pushing addr of local variable {}", v.id)));
+            let frimm = cg.get_frame_imm(*v.offset.get().unwrap());
+            cg.emit(("addiu", CG::T0, CG::FP, frimm));
         }
         cg.emit_push(CG::T0);
     }

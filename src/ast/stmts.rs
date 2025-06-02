@@ -43,9 +43,9 @@ impl Ast for IfStmt {
         let exit_label = cg.next_label();
         self.cond.codegen(cg);
         cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::ZERO, CG::T0, Label(&exit_label)));
+        cg.emit(("beq", CG::ZERO, CG::T0, Label(exit_label.clone())));
         self.body.codegen(cg);
-        cg.emit(Label(&exit_label));
+        cg.emit(Label(exit_label));
     }
 }
 
@@ -96,13 +96,13 @@ impl Ast for IfElseStmt {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        let else_label = &cg.next_label(); 
-        let exit_label = &cg.next_label();
+        let else_label = cg.next_label(); 
+        let exit_label = cg.next_label();
         self.cond.codegen(cg);
         cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::T0, CG::ZERO, Label(else_label)));
+        cg.emit(("beq", CG::T0, CG::ZERO, Label(else_label.clone())));
         self.then_body.codegen(cg);
-        cg.emit(("j", Label(exit_label)));
+        cg.emit(("j", Label(exit_label.clone())));
         cg.emit(Label(else_label));
         self.else_body.codegen(cg);
         cg.emit(Label(exit_label));
@@ -150,12 +150,12 @@ impl Ast for WhileStmt {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        let check_label = &cg.next_label();
-        let end_label = &cg.next_label();
-        cg.emit(Label(check_label));
+        let check_label = cg.next_label();
+        let end_label = cg.next_label();
+        cg.emit(Label(check_label.clone()));
         self.cond.codegen(cg);
         cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::T0, CG::ZERO, Label(end_label)));
+        cg.emit(("beq", CG::T0, CG::ZERO, Label(end_label.clone())));
         self.body.codegen(cg);
         cg.emit(("j", Label(check_label)));
         cg.emit(Label(end_label));

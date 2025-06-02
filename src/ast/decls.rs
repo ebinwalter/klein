@@ -185,7 +185,7 @@ impl Ast for VarDecl {
             let name = &sym.id;
             cg.emit(Directive::Data);
             cg.emit(".align 4");
-            cg.emit(Label(&format!("_{}", name)));
+            cg.emit(Label(format!("_{}", name)));
             cg.emit(Directive::Space(size));
         }
     }
@@ -300,28 +300,30 @@ impl Ast for FunDecl {
         };
         cg.emit(Directive::Text);
         // Preamble
-        cg.emit(Label(&name));
+        cg.emit(Label(name.clone()));
         // Prologue (save old frame pointer, RA, etc.)
         cg.start_new_function(name.clone());
         cg.emit_push(CG::RA);
         cg.emit_push(CG::FP);
         cg.emit(("addu", CG::FP, CG::SP, 8));
+        // Start buffering the 
         cg.start_buffering();
         // Make room on stack for top level variables in the frame
         let &frame_size = self.frame_size.get().unwrap();
-        cg.emit(("subu", CG::SP, CG::SP, frame_size));
+        cg.emit(("subu", CG::SP, CG::SP, frame_size - 8));
         for item in body.get_list().iter() {
             item.codegen(cg);
         }
         let code = cg.finish_buffering().unwrap();
-        // Get a single ordering of all of the temp registers used in the
+        // We need a single ordering of all of the temp registers used in the
         // function.
         let regs_used = cg.get_regs_used();
         for reg in regs_used.iter() {
             cg.emit_push(reg);
         }
+        cg.set_frame_offset(-4 * regs_used.len() as i32);
         cg.emit(code);
-        cg.emit(Label(&format!("{name}_exit")));
+        cg.emit(Label(format!("{name}_exit")));
         for (ix, reg) in regs_used.iter().enumerate().rev() {
             let offset = -4i32 * ix as i32 - 8;
             cg.emit(("lw", *reg, CG::FP, Ix(offset)));

@@ -244,9 +244,9 @@ impl Ast for AssignExpr {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        cg.emit(Comment("Generating lvalue for assignment"));
+        cg.emit(Comment("Generating lvalue for assignment".into()));
         self.loc.codegen_lvalue(cg);
-        cg.emit(Comment("Generating rvalue for assignment"));
+        cg.emit(Comment("Generating rvalue for assignment".into()));
         if let Some(r) = self.value.codegen_reg(cg) {
             cg.emit(("move", CG::T1, r));
         } else {
@@ -262,7 +262,6 @@ impl Ast for AssignExpr {
         };
         cg.emit((store_ins, CG::T1, CG::T0, Ix(0)));
         
-        cg.emit(Comment("Putting value back on stack (for chains)"));
         cg.emit_push(CG::T1);
     }
 }
@@ -344,7 +343,7 @@ impl Ast for CallExpr {
         // Hacky thing to get the current instruction pointer, so we
         // can jump to function pointers
         let return_label = cg.next_label();
-        cg.emit(("la", "$31", Label(&return_label)));
+        cg.emit(("la", "$31", Label(return_label.clone())));
         for arg in self.args.iter().rev() {
             arg.codegen(cg);
         }

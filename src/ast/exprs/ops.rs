@@ -423,13 +423,13 @@ impl BinOp for LogicalOr {
         self.lhs.codegen(cg);
         cg.emit_pop(CG::T0);
         // If the LHS's result was nonzero (i.e., true), jump to the true label
-        cg.emit(("bne", CG::T0, CG::ZERO, Label(&true_label)));
+        cg.emit(("bne", CG::T0, CG::ZERO, Label(true_label.clone())));
         self.rhs.codegen(cg);
-        cg.emit(("j", Label(&false_label)));
-        cg.emit(Label(&true_label));
+        cg.emit(("j", Label(false_label.clone())));
+        cg.emit(Label(true_label));
         // Put that true value back onto the stack
         cg.emit_push(CG::T0);
-        cg.emit(Label(&false_label));
+        cg.emit(Label(false_label));
         // Exit evaluation
     }
 }
@@ -452,15 +452,15 @@ impl BinOp for LogicalAnd {
         self.lhs.codegen(cg);
         cg.emit_pop(CG::T0);
         // If the lhs is false, the whole expression is false -- short-circuit to the end
-        cg.emit(("beq", CG::T0, CG::ZERO, Label(&false_label)));
+        cg.emit(("beq", CG::T0, CG::ZERO, Label(false_label.clone())));
         // Otherwise it takes on the value of RHS, so push that to the stack, and jump
         // to the end of evaluation.
         self.rhs.codegen(cg);
-        cg.emit(("j", Label(&true_label)));
-        cg.emit(Label(&false_label));
+        cg.emit(("j", Label(true_label.clone())));
+        cg.emit(Label(false_label));
         // Push the false result we just branched because of back onto the stack.
         cg.emit_push(CG::T0);
-        cg.emit(Label(&true_label));
+        cg.emit(Label(true_label));
     }
 }
 

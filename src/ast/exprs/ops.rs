@@ -133,10 +133,10 @@ impl<T> Ast for T
         } else {
             if let Some(r2) = lhs.codegen_reg(cg) {
                 if let Some(r1) = rhs.codegen_reg(cg) {
-                    cg.emit(("move", CG::T0, r1));
+                    cg.emit(("move", CG::T1, r1));
                     cg.relinquish_regs(&[r1]);
                 } else {
-                    cg.emit_pop(CG::T0);
+                    cg.emit_pop(CG::T1);
                 }
                 // This has to happen after codegen for the RHS, because
                 // the generated code is fully allowed to modify or use T0 and T1
@@ -144,7 +144,9 @@ impl<T> Ast for T
                 cg.emit(("move", CG::T1, r2));
                 cg.relinquish_regs(&[r2]);
             } else {
+                rhs.codegen(cg);
                 cg.emit_pop(CG::T1);
+                cg.emit_pop(CG::T0);
             }
             BinOp::codegen(self, cg, &lhs_ty);
         }
@@ -165,20 +167,23 @@ impl<T> Ast for T
         } else {
             if let Some(r2) = lhs.codegen_reg(cg) {
                 if let Some(r1) = rhs.codegen_reg(cg) {
-                    cg.emit(("move", CG::T0, r1));
+                    cg.emit(("move", CG::T1, r1));
                     cg.relinquish_regs(&[r1]);
                 } else {
-                    cg.emit_pop(CG::T0);
+                    cg.emit_pop(CG::T1);
                 }
-                cg.emit(("move", CG::T1, r2));
+                cg.emit(("move", CG::T0, r2));
                 cg.relinquish_regs(&[r2]);
             } else {
+                // If we couldn't allocate enough regs for the lhs codegen,
+                // we probably can't for the rhs codegen.
+                rhs.codegen(cg);
                 cg.emit_pop(CG::T1);
+                cg.emit_pop(CG::T0);
             }
             if let Some(r) = BinOp::codegen_reg(self, cg, &lhs_ty) {
                 Some(r)
             } else {
-                println!("Failed to generate binop into register");
                 BinOp::codegen(self, cg, &lhs_ty);
                 None
             }
@@ -254,7 +259,7 @@ impl BinOp for Minus {
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         match lhs_ty {
             Type::Int => {
-                cg.emit(("sub", CG::T0, CG::T1, CG::T0));
+                cg.emit(("sub", CG::T0, CG::T0, CG::T1));
                 cg.emit_push(CG::T0);
             },
             Type::Double => {

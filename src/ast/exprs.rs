@@ -48,11 +48,13 @@ impl Ast for IntLit {
         cg.emit_push(CG::T0);
     }
 
+    /*
     fn codegen_reg(&self, cg: &mut Codegen) -> Option<&'static str> {
         let r = cg.take_storage_reg()?;
         cg.emit(("li", r, self.value as u32));
         Some(r)
     }
+    */
 }
 
 impl Expr for IntLit {}
@@ -86,6 +88,13 @@ impl Ast for StringLit {
         let label = cg.label_for_string(self.span);
         cg.emit(("la", CG::T0, Label(label)));
         cg.emit_push(CG::T0);
+    }
+
+    fn codegen_reg(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let reg = cg.take_storage_reg()?;
+        let label = cg.label_for_string(self.span);
+        cg.emit(("la", reg, Label(label)));
+        Some(reg)
     }
 }
 
@@ -238,8 +247,11 @@ impl Ast for AssignExpr {
         cg.emit(Comment("Generating lvalue for assignment"));
         self.loc.codegen_lvalue(cg);
         cg.emit(Comment("Generating rvalue for assignment"));
-        self.value.codegen(cg);
-        cg.emit_pop(CG::T1);
+        if let Some(r) = self.value.codegen_reg(cg) {
+            cg.emit(("move", CG::T1, r));
+        } else {
+            cg.emit_pop(CG::T1);
+        }
         cg.emit_pop(CG::T0);
         // Adjust instruction for storing a value based
         // on the expression's size

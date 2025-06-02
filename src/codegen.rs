@@ -74,6 +74,14 @@ impl<'a> Codegen<'a> {
             label
         }
     }
+
+    pub fn next_free_reg(&mut self) -> Option<&'static str> {
+        todo!();
+    }
+
+    pub fn relinquish_reg(&mut self, reg: &'static str) {
+        todo!();
+    }
 }
 
 impl Drop for Codegen<'_> {

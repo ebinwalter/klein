@@ -16,6 +16,10 @@ trait BinOp {
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         panic!("Unimplemented binary operator {}", Self::SYMBOL)
     }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type) -> Option<&'static str> {
+        self.codegen(cg, lhs_ty);
+        None
+    }
 }
 
 impl<T> Ast for T
@@ -128,11 +132,51 @@ impl<T> Ast for T
             // logical operators
             BinOp::codegen(self, cg, &lhs_ty);
         } else {
-            lhs.codegen(cg);
-            rhs.codegen(cg);
-            cg.emit_pop(CG::T1);
-            cg.emit_pop(CG::T0);
+            if let Some(r_lhs) = lhs.codegen_register(cg) {
+                if let Some(r_rhs) = rhs.codegen_register(cg) {
+                    cg.emit(("move", CG::T1, r_rhs));
+                    cg.relinquish_reg(r_rhs);
+                } else {
+                    cg.emit_pop(CG::T1)
+                }
+                cg.emit(("move", CG::T0, r_lhs));
+                cg.relinquish_reg(r_lhs);
+            } else {
+                cg.emit_pop(CG::T0);
+            }
+            if let Some(r) = BinOp::codegen_reg(self, cg, &lhs_ty) {
+                cg.emit_push(r);
+                cg.relinquish_reg(r);
+            }
+        }
+    }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let (lhs, rhs) = self.operands();
+        let lhs_ty = cg.type_cache.get(lhs.as_ref())
+            .expect("type should've been cached during type checking for \
+                     binary operator")
+            .clone();
+        if let OpType::Logical = Self::OP_TYPE {
+            // We leave generating code for operands up to the implementation
+            // of the operator because we may want to short-circuit some
+            // logical operators
             BinOp::codegen(self, cg, &lhs_ty);
+            None
+        } else {
+            if let Some(r_lhs) = lhs.codegen_register(cg) {
+                if let Some(r_rhs) = rhs.codegen_register(cg) {
+                    cg.emit(("move", CG::T1, r_rhs));
+                    cg.relinquish_reg(r_rhs);
+                } else {
+                    cg.emit_pop(CG::T1)
+                }
+                cg.emit(("move", CG::T0, r_lhs));
+                cg.relinquish_reg(r_lhs);
+            } else {
+                cg.emit_pop(CG::T0);
+            }
+            BinOp::codegen_reg(self, cg, &lhs_ty)
         }
     }
 }
@@ -177,6 +221,19 @@ impl BinOp for Plus {
                 todo!("fp arithmetic");
             },
             _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type) -> Option<&'static str> {
+        match &lhs_ty {
+            Type::Int => {
+                let Some(r) = cg.next_free_reg() else {
+                    BinOp::codegen(self, cg, lhs_ty);
+                    return None;
+                };
+                cg.emit(("add", r, CG::T0, CG::T1));
+                Some(r)
+            },
+            _ => unimplemented!()
         }
     }
 }

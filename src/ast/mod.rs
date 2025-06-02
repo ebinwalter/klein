@@ -44,11 +44,21 @@ pub trait Ast {
     /// to call codegen_lvalue instead.
     fn codegen(&self, cg: &mut Codegen) {
     }
+    /// Generates code for an AST node which outputs to a free temporary register
+    /// and returns the label of the register it chose.  If the method returns None,
+    /// it means that we couldn't allocate a register, a sub-expression didn't support it,
+    /// or this method was unimplemented.  In any case, the result should be on the stack
+    /// if the method returned None.
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        self.codegen(cg);
+        None
+    }
+    /// Place the address of this expression on the stack.
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         // We've written things such that this should never happen.
         // But we should crash and burn if it does happen, because we need to
         // go back and reexamine the structure of things.
-        panic!("Attempt to use an unsuitable AST node as an rvalue");
+        panic!("Attempt to use an unsuitable AST node as an lvalue");
     }
     /// Return a canonical symbol associated with this AST node.
     /// For example, if this is an ID, give the VarDecl symbol associated with

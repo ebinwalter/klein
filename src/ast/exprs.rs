@@ -47,6 +47,15 @@ impl Ast for IntLit {
         cg.emit(("addi", CG::T0, CG::ZERO, self.value as u32));
         cg.emit_push(CG::T0);
     }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(reg) = cg.next_free_reg() else {
+            self.codegen(cg);
+            return None;
+        };
+        cg.emit(("li", reg, self.value as u32));
+        Some(reg)
+    }
 }
 
 impl Expr for IntLit {}

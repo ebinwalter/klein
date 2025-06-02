@@ -321,10 +321,10 @@ fn compute_var_offsets(&self, oc: OCtx) {
         }
         cg.emit(Label(&format!("{name}_exit")));
         // Restore temporary registers $t4-$t7 from the stack
-        cg.emit(("lw", "$t4", CG::FP, Ix(-20)));
-        cg.emit(("lw", "$t5", CG::FP, Ix(-16)));
-        cg.emit(("lw", "$t6", CG::FP, Ix(-12)));
-        cg.emit(("lw", "$t7", CG::FP, Ix(-8)));
+        cg.emit(("lw", "$t7", CG::FP, Ix(-20)));
+        cg.emit(("lw", "$t6", CG::FP, Ix(-16)));
+        cg.emit(("lw", "$t5", CG::FP, Ix(-12)));
+        cg.emit(("lw", "$t4", CG::FP, Ix(-8)));
         cg.emit(("lw", CG::T0, CG::FP, Ix(-4)));
         cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
         cg.emit(("move", CG::SP, CG::FP));

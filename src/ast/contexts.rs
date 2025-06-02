@@ -206,7 +206,8 @@ impl OffsetsContext {
     }
     pub fn start_frame(&mut self) {
         self.offset_stack.push(self.aligner.next_offset);
-        self.aligner.next_offset = -8;
+        // Adjusted from -8 to -24 to account for saving $ra, $fp, $t4, $t5, $t6, $t7 (6 registers * 4 bytes)
+        self.aligner.next_offset = -24;
     }
     pub fn push_var(&mut self, size: u32) -> i32 {
         self.aligner.place(size)

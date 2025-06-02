@@ -387,6 +387,7 @@ impl Ast for Id {
             let ty = (*vs.ty).clone();
             
             // Check if this is a struct type being used in an rvalue position
+            /*
             if let Type::Struct(_, _) = ty {
                 tc.raise_error(
                     Rc::new(self.clone()),
@@ -394,6 +395,7 @@ impl Ast for Id {
                 );
                 return None;
             }
+            */
             
             Some(ty)
         } else {

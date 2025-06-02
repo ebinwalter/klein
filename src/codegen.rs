@@ -17,6 +17,10 @@ impl<'a> Codegen<'a> {
     pub const T1: &'static str = "$t1";
     pub const T2: &'static str = "$t2";
     pub const T3: &'static str = "$t3";
+    pub const T4: &'static str = "$t4";
+    pub const T5: &'static str = "$t5";
+    pub const T6: &'static str = "$t6";
+    pub const T7: &'static str = "$t7";
     pub const V0: &'static str = "$v0";
     pub const V1: &'static str = "$v1";
     pub const A0: &'static str = "$a0";

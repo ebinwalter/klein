@@ -199,10 +199,6 @@ pub struct FunDecl {
     /// Size of frame (includes former frame pointer)
     pub frame_size: OnceCell<u32>,
     // New fields for saved register offsets
-    pub t4_offset: OnceCell<i32>,
-    pub t5_offset: OnceCell<i32>,
-    pub t6_offset: OnceCell<i32>,
-    pub t7_offset: OnceCell<i32>,
 }
 
 impl FunDecl {
@@ -213,10 +209,6 @@ impl FunDecl {
             formals,
             body,
             frame_size: OnceCell::new(),
-            t4_offset: OnceCell::new(),
-            t5_offset: OnceCell::new(),
-            t6_offset: OnceCell::new(),
-            t7_offset: OnceCell::new(),
         }.into()
     }
 }
@@ -293,10 +285,6 @@ impl Ast for FunDecl {
 fn compute_var_offsets(&self, oc: OCtx) {
         oc.start_frame();
         // Allocate space for saved registers $t4-$t7 and record their offsets
-        self.t4_offset.set(oc.push_var(4)).unwrap();
-        self.t5_offset.set(oc.push_var(4)).unwrap();
-        self.t6_offset.set(oc.push_var(4)).unwrap();
-        self.t7_offset.set(oc.push_var(4)).unwrap();
         if let Some(b) = &self.body {
             b.get_list().iter().for_each(|item| item.compute_var_offsets(oc));
         }
@@ -319,26 +307,26 @@ fn compute_var_offsets(&self, oc: OCtx) {
         // Prologue (save old frame pointer, RA, etc.)
         cg.emit_push(CG::RA);
         cg.emit_push(CG::FP);
-        cg.emit(("addu", CG::FP, CG::SP, 8));
+        cg.emit_push(CG::T4);
+        cg.emit_push(CG::T5);
+        cg.emit_push(CG::T6);
+        cg.emit_push(CG::T7);
+        cg.emit(("addu", CG::FP, CG::SP, 24));
         // Make room on stack for top level variables in the frame (includes saved registers)
         let &frame_size = self.frame_size.get().unwrap();
         cg.emit(("subu", CG::SP, CG::SP, frame_size));
         // Save temporary registers $t4-$t7 to the stack
-        cg.emit(("sw", "$t4", CG::FP, *self.t4_offset.get().unwrap()));
-        cg.emit(("sw", "$t5", CG::FP, *self.t5_offset.get().unwrap()));
-        cg.emit(("sw", "$t6", CG::FP, *self.t6_offset.get().unwrap()));
-        cg.emit(("sw", "$t7", CG::FP, *self.t7_offset.get().unwrap()));
         for item in body.get_list().iter() {
             item.codegen(cg);
         }
         cg.emit(Label(&format!("{name}_exit")));
         // Restore temporary registers $t4-$t7 from the stack
-        cg.emit(("lw", "$t4", CG::FP, *self.t4_offset.get().unwrap()));
-        cg.emit(("lw", "$t5", CG::FP, *self.t5_offset.get().unwrap()));
-        cg.emit(("lw", "$t6", CG::FP, *self.t6_offset.get().unwrap()));
-        cg.emit(("lw", "$t7", CG::FP, *self.t7_offset.get().unwrap()));
-        cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
+        cg.emit(("lw", "$t4", CG::FP, Ix(-20)));
+        cg.emit(("lw", "$t5", CG::FP, Ix(-16)));
+        cg.emit(("lw", "$t6", CG::FP, Ix(-12)));
+        cg.emit(("lw", "$t7", CG::FP, Ix(-8)));
         cg.emit(("lw", CG::T0, CG::FP, Ix(-4)));
+        cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
         cg.emit(("move", CG::SP, CG::FP));
         cg.emit(("move", CG::FP, CG::T0));
         if name != "main" {

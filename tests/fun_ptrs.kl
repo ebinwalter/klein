@@ -25,7 +25,7 @@ fun free_freeable(struct Freeable *f) {
 fun get_freer(struct Freeable *f) -> fun(void *) {
 }
 
-fun free_noop(void *) {}
+fun free_noop(void *x) {}
 
 fun main() {
   struct Freeable f;

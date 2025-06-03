@@ -56,7 +56,7 @@ impl<'a> Unparser<'a> {
         match self.out {
             UnparserOutput::Vec(ref mut v) => v.extend_from_slice(to_write),
             UnparserOutput::Stdout(ref mut s) => {
-                s.write(to_write).unwrap();
+                s.write_all(to_write).unwrap();
             }
         };
     }
@@ -78,7 +78,7 @@ impl<'a> Unparser<'a> {
         match self.out {
             UnparserOutput::Vec(ref mut v) => v.extend_from_slice(to_write),
             UnparserOutput::Stdout(ref mut s) => {
-                s.write(to_write).unwrap();
+                s.write_all(to_write).unwrap();
             }
         };
     }

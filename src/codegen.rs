@@ -14,11 +14,11 @@ pub struct Codegen<'a> {
 }
 
 pub trait Register: std::fmt::Display {
-    fn str(&self) -> &'static str;
+    fn str(&self) -> &str;
 }
 
-impl Register for &'static str {
-    fn str(&self) -> &'static str {
+impl Register for &str {
+    fn str(&self) -> &str {
         self
     }
 }

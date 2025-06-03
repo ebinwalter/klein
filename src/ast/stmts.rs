@@ -421,3 +421,113 @@ impl Ast for OutputStmt {
 }
 
 impl Stmt for OutputStmt {}
+
+pub struct EmitStmt {
+    pub text: StringLit,
+}
+
+impl Ast for EmitStmt {
+    fn unparse(&self, up: Up) {
+        up.write_indent();
+        up.write("emit ");
+        self.text.unparse(up);
+        up.end_stmt();
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        let str_contents = self.text.unparse_to_string(cg.ref_text);
+        cg.emit(str_contents.trim_matches('\"'));
+    }
+}
+
+impl Stmt for EmitStmt {}
+
+pub struct RegisterLit(pub String);
+
+pub struct LoadStmt {
+    reg: RegisterLit,
+    rvalue: Boxpr,
+}
+
+impl LoadStmt {
+    pub fn new(reg: RegisterLit, rvalue: Boxpr) -> Self {
+        Self { reg, rvalue }
+    }
+}
+
+impl Ast for LoadStmt {
+    fn unparse(&self, up: Up) {
+        up.write_indent();
+        up.write(&self.reg.0);
+        up.write(" <- ");
+        self.rvalue.unparse(up);
+        up.end_stmt();
+    }
+
+    fn analyze_names(&self, na: NACtx) {
+        self.rvalue.analyze_names(na);
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        let ty = self.rvalue.typecheck(tc)?;
+        tc.cache_type(&*self.rvalue, &ty);
+        None
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        if let Some(reg) = self.rvalue.codegen_register(cg) {
+            cg.emit(("move", &*self.reg.0, reg));
+        } else {
+            cg.emit_pop(&*self.reg.0);
+        }
+    }
+}
+
+impl Stmt for LoadStmt {}
+
+pub struct StoreStmt {
+    reg: RegisterLit,
+    lvalue: BoxLoc,
+}
+
+impl StoreStmt {
+    pub fn new(reg: RegisterLit, lvalue: BoxLoc) -> Self {
+        Self { reg, lvalue }
+    }
+}
+
+impl Ast for StoreStmt {
+    fn unparse(&self, up: Up) {
+        up.write_indent();
+        up.write(&self.reg.0);
+        up.write(" -> ");
+        self.lvalue.unparse(up);
+        up.end_stmt();
+    }
+
+    fn analyze_names(&self, na: NACtx) {
+        self.lvalue.analyze_names(na);
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        let ty = self.lvalue.typecheck(tc)?;
+        tc.cache_type(&*self.lvalue, &ty);
+        None
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        let ins = match cg.type_cache.get(&*self.lvalue).unwrap().size() {
+            1 => "sb",
+            4 => "sw",
+            _ => panic!()
+        };
+        if let Some(reg) = self.lvalue.codegen_register(cg) {
+            cg.emit((ins, &*self.reg.0, reg, Ix(0)));
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit((ins, &*self.reg.0, CG::T0, Ix(0)));
+        }
+    }
+}
+
+impl Stmt for StoreStmt {}

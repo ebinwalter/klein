@@ -149,9 +149,30 @@ Stmt -> Result<BoxStmt, ()>
   | ReturnStmt { $1 }
   | WhileStmt { $1 }
   | DontStmt { $1 } 
+  | EmitStmt { $1 }
+  | LoadStmt { $1 }
+  | StoreStmt { $1 }
   | Expr ';' { Ok(ExprStmt::new($1?)) }
   | 'OUT' 'LARROW' Expr ';' { Ok(box_stmt(OutputStmt {expr: $3?})) }
   | 'IN' 'ARROW' Loc ';' { Ok(box_stmt(InputStmt {loc: $3?})) }
+  ;
+
+EmitStmt -> Result<BoxStmt, ()>
+  : 'EMIT' StringLit ';' { Ok(Rc::new(EmitStmt { text: $2? })) }
+  ;
+
+LoadStmt -> Result<BoxStmt, ()>
+  : RegisterLit 'LARROW' Expr ';'
+  {
+    Ok(Rc::new(LoadStmt::new( $1?, $3? )))
+  }
+  ;
+
+StoreStmt -> Result<BoxStmt, ()>
+  : RegisterLit 'ARROW' Loc ';'
+  {
+    Ok(Rc::new(StoreStmt::new( $1?, $3? )))
+  }
   ;
 
 ReturnStmt -> Result<BoxStmt, ()>
@@ -311,6 +332,14 @@ StringLit -> Result<StringLit, ()>
     let span = $1.map_err(|_| ())?.span();
     let ((line, col), _) = $lexer.line_col(span);
     Ok(StringLit {span, line, col})
+  }
+  ;
+
+RegisterLit -> Result<RegisterLit, ()>
+  : 'REGLIT'
+  {
+    let span = $1.map_err(|_| ())?.span();
+    Ok(RegisterLit($lexer.span_str(span).to_owned()))
   }
   ;
 

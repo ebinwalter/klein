@@ -11,6 +11,8 @@ pub enum Type {
     SelfRef,
     Reference(Rc<Type>),
     Array(Rc<Type>, u32),
+    /// Function pointer to a function which accepts a list of
+    /// types and (possibly) returns another
     FunPtr(Vec<Type>, Rc<Type>)
 }
 
@@ -51,7 +53,13 @@ impl Type {
                     return false;
                 }
                 for (ix, arg) in args1.iter().enumerate() {
-                    // This isn't backwards:  
+                    // Note that the following isn't backwards: subtyping is contravariant in 
+                    // the input parameters of functions.
+                    //
+                    // Think about it: You can use a function f: int->int like you would
+                    // a function g: char->int, which is to say f's type is a subtype of g's.
+                    // Yet f's argument is a supertype of g's argument, so the typing relation is
+                    // inverted in our parameters.
                     if !args2[ix].is_subtype_of(arg) {
                         return false;
                     }
@@ -87,6 +95,13 @@ impl Display for Type {
             Self::Reference(t) => {
                 t.fmt(f).and_then(|_| f.write_char('*'))
             },
+            Self::FunPtr(ts, t) => {
+                f.write_str("fun(").unwrap();
+                let s = ts.iter().map(|x| format!("{x}")).collect::<Vec<_>>();
+                f.write_str(&s.join(", ")).unwrap();
+                f.write_str(") -> ").unwrap();
+                t.fmt(f)
+            }
             _ => todo!()
         }
     }

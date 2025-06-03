@@ -365,6 +365,7 @@ impl Ast for CallExpr {
     }
 
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        // Raise an error if this value isn't associated with a function pointer type
         let Some(Type::FunPtr(fun_args, deref!(ref ret_ty))) = self.fun.typecheck(tc) else {
             tc.raise_error(self.fun.clone(), "Attempt to call a non-function".into());
             return None;
@@ -379,6 +380,10 @@ impl Ast for CallExpr {
                 let Some(t1) = e1.typecheck(tc) else { continue };
                 let t2 = &fun_args[i];
                 let arg_no = i + 1;
+                // This used to check for equality, but since I've implemented function pointers
+                // and subtyping, I relaxed the constraint.
+                // This would let you pass a character to a function expecting an int, and what
+                // have you.
                 if !t1.is_subtype_of(t2) {
                     let m = format!("argument #{arg_no} should be a subtype of {t2}, but a {t1} was given");
                     tc.raise_error(e1.clone(), m);

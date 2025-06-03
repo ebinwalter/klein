@@ -407,8 +407,8 @@ impl Ast for Id {
             
             Some(ty)
         } else if let Symbol::Func(fs) = &**self.sym.get().unwrap() {
-            // If we call `typecheck` on a function, we're using it like a value
-            // It would have this type
+            // If we're calling typecheck on a function, then we expect to use it as a value
+            // In that case, it has the type of a function pointer
             Some(Type::FunPtr(fs.arg_types.clone(), fs.return_type.clone().into()))
         } else {
             tc.raise_error(Rc::new(self.clone()), "Attempted to check the type of a non-variable".into());

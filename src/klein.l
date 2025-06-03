@@ -43,6 +43,7 @@ if "IF"
 is "IS"
 else "ELSE"
 return "RETURN"
+don't "DONT"
 while "WHILE"
 the "THE"
 true "TRUE"
@@ -56,3 +57,4 @@ variant "VARIANT"
 [\t \n]+ ;
 \/\/[^\n]* ;
 [0-9]+ "INT"
+0x[0-9A-Fa-f]+ "HEXINT"

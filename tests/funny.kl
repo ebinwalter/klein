@@ -1,2 +1,6 @@
 fun main() {
+  don't {
+    out <- "kill yourself\n";
+  }
+  out <- ":geometrygood:\n";
 }

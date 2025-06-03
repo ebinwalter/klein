@@ -148,6 +148,7 @@ Stmt -> Result<BoxStmt, ()>
   | IfElseStmt { $1 }
   | ReturnStmt { $1 }
   | WhileStmt { $1 }
+  | DontStmt { $1 } 
   | Expr ';' { Ok(ExprStmt::new($1?)) }
   | 'OUT' 'LARROW' Expr ';' { Ok(box_stmt(OutputStmt {expr: $3?})) }
   | 'IN' 'ARROW' Loc ';' { Ok(box_stmt(InputStmt {loc: $3?})) }
@@ -176,6 +177,13 @@ WhileStmt -> Result<BoxStmt, ()>
   : 'WHILE' Expr ScopeBlock
   {
     Ok(WhileStmt::new($2?, $3?))
+  }
+  ;
+
+DontStmt -> Result<BoxStmt, ()>
+  : 'DONT' ScopeBlock
+  {
+    Ok(IfStmt::new(Rc::new(BoolLit { value: false, line: 0, col: 0 }), $2?))
   }
   ;
 

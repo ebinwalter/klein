@@ -152,13 +152,15 @@ impl Ast for WhileStmt {
     fn codegen(&self, cg: &mut Codegen) {
         let check_label = &cg.next_label();
         let end_label = &cg.next_label();
-        cg.emit(Comment(&format!("while {}", self.cond.unparse_to_string(cg.ref_text))));
+        let string_cond = self.cond.unparse_to_string(cg.ref_text);
+        cg.emit(Comment(&format!("while {}", &string_cond)));
         cg.emit(Label(check_label));
         self.cond.codegen(cg);
         cg.emit_pop(CG::T0);
         cg.emit(("beq", CG::T0, CG::ZERO, Label(end_label)));
         self.body.codegen(cg);
         cg.emit(("j", Label(check_label)));
+        cg.emit(Comment(&format!("end of while {}", &string_cond)));
         cg.emit(Label(end_label));
     }
 }
@@ -372,8 +374,12 @@ impl Ast for OutputStmt {
     fn codegen(&self, cg: &mut Codegen) {
         match cg.type_cache.get(&*self.expr).unwrap() {
             Type::Int => {
-                self.expr.codegen(cg);
-                cg.emit_pop(CG::A0);
+                if let Some(reg) = self.expr.codegen_register(cg) {
+                    cg.emit(("move", CG::A0, reg));
+                    cg.relinquish_reg(reg);
+                } else {
+                    cg.emit_pop(CG::A0);
+                }
                 cg.emit(("li", CG::V0, 1));
                 cg.emit("syscall");
             },
@@ -384,7 +390,12 @@ impl Ast for OutputStmt {
                 cg.emit("syscall");
             },
             Type::Array(deref!(Type::Char), _) => {
-                self.expr.codegen_lvalue(cg);
+                if let Some(reg) = self.expr.codegen_lvalue_register(cg) {
+                    cg.emit(("move", CG::A0, reg));
+                    cg.relinquish_reg(reg);
+                } else {
+                    cg.emit_pop(CG::A0);
+                }
                 cg.emit_pop(CG::A0);
                 cg.emit(("li", CG::V0, 4));
                 cg.emit("syscall");

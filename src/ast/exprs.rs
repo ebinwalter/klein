@@ -720,6 +720,7 @@ impl Ast for IndexExpr {
                 cg.emit_pop(CG::T1);
                 cg.emit(("mul", CG::T0, CG::T0, CG::T1));
                 cg.emit(("add", CG::T0, CG::T0, r1));
+                cg.emit_push(CG::T0);
                 cg.relinquish_reg(r1);
             }
         } else {

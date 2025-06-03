@@ -11,12 +11,16 @@ impl Ast for NullLit {
         up.write("null");
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> {
         Some(Type::Reference(Type::Void.into()))
     }
 
     fn codegen(&self, cg: &mut Codegen) {
         cg.emit_push(CG::ZERO);
+    }
+
+    fn codegen_register(&self, _cg: &mut Codegen) -> Option<AllocatedRegister> {
+        Some(AllocatedRegister::new(CG::ZERO))
     }
 }
 
@@ -48,13 +52,17 @@ impl Ast for IntLit {
         cg.emit_push(CG::T0);
     }
 
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         let Some(reg) = cg.next_free_reg() else {
             self.codegen(cg);
             return None;
         };
-        cg.emit(("li", reg, self.value as u32));
+        cg.emit(("li", &reg, self.value as u32));
         Some(reg)
+    }
+
+    fn code_location(&self) -> Option<(usize, usize)> {
+        Some((self.line, self.col))
     }
 }
 
@@ -90,6 +98,17 @@ impl Ast for StringLit {
         cg.emit(("la", CG::T0, Label(label)));
         cg.emit_push(CG::T0);
     }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        if let Some(reg) = cg.next_free_reg() {
+            let label = cg.label_for_string(self.span);
+            cg.emit(("la", &reg, Label(label)));
+            Some(reg)
+        } else {
+            self.codegen(cg);
+            None
+        }
+    }
 }
 
 impl Expr for StringLit {}
@@ -124,6 +143,10 @@ impl Ast for BoolLit {
         }
         cg.emit_push(CG::T0);
     }
+
+    fn code_location(&self) -> Option<(usize, usize)> {
+        Some((self.line, self.col))
+    }
 }
 
 impl Expr for BoolLit {}
@@ -157,7 +180,7 @@ impl Ast for CharLit {
         let (a, b) = char_str.split_at(1);
         if a.chars().nth(0).unwrap() == '\\' {
             if let Ok(n) = b.parse::<u8>() {
-                self.value.set(n);
+                self.value.set(n).unwrap();
             } else {
                 // Escapes taken from https://gist.github.com/ConnerWill/d4b6c776b509add763e17f9f113fd25b
                 let ch = match b.chars().nth(0).unwrap() {
@@ -172,10 +195,10 @@ impl Ast for CharLit {
                         return;
                     }
                 };
-                self.value.set(ch);
+                self.value.set(ch).unwrap();
             }
         } else {
-            self.value.set(a.as_bytes()[0]);
+            self.value.set(a.as_bytes()[0]).unwrap();
         }
     }
 
@@ -183,13 +206,23 @@ impl Ast for CharLit {
         Some((self.line, self.col))
     }
 
-    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
-        return Some(Type::Char)
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> {
+        Some(Type::Char)
     }
 
     fn codegen(&self, cg: &mut Codegen) {
         cg.emit(("li", CG::T0, *self.value.get().unwrap() as u32));
         cg.emit_push(CG::T0);
+    }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        if let Some(reg) = cg.next_free_reg() {
+            cg.emit(("li", &reg, *self.value.get().unwrap() as u32));
+            Some(reg)
+        } else {
+            self.codegen(cg);
+            None
+        }
     }
 }
 
@@ -245,15 +278,12 @@ impl Ast for AssignExpr {
         };
         if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
             if let Some(val_reg) = self.value.codegen_register(cg) {
-                cg.emit((store_ins, val_reg, loc_reg, Ix(0)));
-                cg.relinquish_reg(loc_reg);
-                cg.emit_push(val_reg);
-                cg.relinquish_reg(val_reg);
+                cg.emit((store_ins, &val_reg, &loc_reg, Ix(0)));
+                cg.emit_push(&val_reg);
             } else {
                 self.value.codegen(cg);
                 cg.emit_pop(CG::T0);
-                cg.emit((store_ins, CG::T0, loc_reg, Ix(0)));
-                cg.relinquish_reg(loc_reg);
+                cg.emit((store_ins, CG::T0, &loc_reg, Ix(0)));
                 cg.emit_push(CG::T0);
             }
         } else {
@@ -265,7 +295,7 @@ impl Ast for AssignExpr {
         }
     }
 
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         let Some(storage_reg) = cg.next_free_reg() else {
             self.codegen(cg);
             return None;
@@ -277,22 +307,22 @@ impl Ast for AssignExpr {
         };
         if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
             if let Some(val_reg) = self.value.codegen_register(cg) {
-                cg.emit((store_ins, val_reg, loc_reg, Ix(0)));
-                cg.relinquish_reg(loc_reg);
-                cg.relinquish_reg(storage_reg);
+                cg.emit((store_ins, &val_reg, &loc_reg, Ix(0)));
+                drop(loc_reg);
+                drop(storage_reg);
                 Some(val_reg)
             } else {
                 self.value.codegen(cg);
-                cg.emit_pop(storage_reg);
-                cg.emit((store_ins, storage_reg, loc_reg, Ix(0)));
-                cg.relinquish_reg(loc_reg);
+                cg.emit_pop(storage_reg.reg);
+                cg.emit((store_ins, &storage_reg, &loc_reg, Ix(0)));
+                drop(loc_reg);
                 Some(storage_reg)
             }
         } else {
             self.value.codegen(cg);
-            cg.emit_pop(storage_reg);
+            cg.emit_pop(&storage_reg);
             cg.emit_pop(CG::T1);
-            cg.emit((store_ins, storage_reg, CG::T1, Ix(0)));
+            cg.emit((store_ins, &storage_reg, CG::T1, Ix(0)));
             Some(storage_reg)
         }
     }
@@ -379,14 +409,43 @@ impl Ast for CallExpr {
         for arg in self.args.iter().rev() {
             arg.codegen(cg);
         }
-        self.fun.codegen(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit(("jr", CG::T0));
-        cg.emit(Label(return_label));
-        for _arg in self.args.iter().rev() {
-            cg.emit_pop(CG::ZERO)
+        if let Some(reg) = self.fun.codegen_register(cg) {
+            cg.emit(("jr", reg.str()));
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("jr", CG::T0));
         }
+        cg.emit(Label(return_label));
+        cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
         cg.emit_push(CG::V0);
+    }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        let return_label = cg.next_label();
+        cg.emit(("la", "$31", Label(&return_label)));
+        cg.emit(("sub", CG::SP, CG::SP, 4 * self.args.len() as u32));
+        for (ix, arg) in self.args.iter().enumerate() {
+            if let Some(reg) = arg.codegen_register(cg) {
+                cg.emit(("sw", reg, CG::SP, Ix(4 + 4 * ix as i32)));
+            } else {
+                cg.emit_pop(CG::T0);
+                cg.emit(("sw", CG::T0, CG::SP, Ix(4 + 4 * ix as i32)));
+            }
+        }
+        if let Some(reg) = self.fun.codegen_register(cg) {
+            cg.emit(("jr", reg.str()));
+            cg.emit(Label(&return_label));
+            cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
+            cg.emit(("move", &reg, CG::V0));
+            return Some(reg)
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("jr", CG::T0));
+        }
+        cg.emit(Label(return_label));
+        cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
+        cg.emit_push(CG::V0);
+        None
     }
 }
 
@@ -433,9 +492,8 @@ impl Ast for AccessExpr {
             if let Some(sym_rc) = struct_scope.get(field_string) {
                 let Symbol::Var(ref v) = **sym_rc else {
                     let m = format!(
-                        "An entry for {} exists in the struct's definition, \
-                        but it is not a member variable",
-                        field_string
+                        "An entry for {field_string} exists in the struct's definition, \
+                        but it is not a member variable"
                     );
                     tc.raise_error(self.field.clone(), m);
                     return None
@@ -475,14 +533,12 @@ impl Ast for AccessExpr {
         if let Some(Type::Reference(_)) = cg.type_cache.get(&*self.obj) {
             if let Some(r) = self.obj.codegen_register(cg) {
                 cg.emit(("move", CG::T0, r));
-                cg.relinquish_reg(r);
             } else {
                 self.obj.codegen(cg);
                 cg.emit_pop(CG::T0);
             }
         } else if let Some(r) = self.obj.codegen_lvalue_register(cg) {
             cg.emit(("move", CG::T0, r));
-            cg.relinquish_reg(r);
         } else {
             self.obj.codegen_lvalue(cg);
             cg.emit_pop(CG::T0);
@@ -494,14 +550,58 @@ impl Ast for AccessExpr {
         cg.emit_push(CG::T0);
     }
 
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        let field_sym = self.field.sym.get().unwrap();
+        let Symbol::Var(ref vs) = **field_sym else { panic!() };
+        let offset = vs.offset.get().unwrap();
+        let load_instr = if let Type::Char = *vs.ty { "lb" } else { "lw" };
+        if let Some(Type::Reference(_)) = cg.type_cache.get(&*self.obj) {
+            if let Some(r) = self.obj.codegen_register(cg) {
+                cg.emit((load_instr, &r, &r, Ix(*offset)));
+                return Some(r);
+            } else {
+                cg.emit_pop(CG::T0);
+            }
+        } else if let Some(r) = self.obj.codegen_lvalue_register(cg) {
+            cg.emit((load_instr, &r, &r, Ix(*offset)));
+            return Some(r)
+        } else {
+            cg.emit_pop(CG::T0);
+        }
+        // Updated: Use the dynamic load_instr instead of hardcoded "lw".
+        cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
+        // --- END CHANGES ---
+        cg.emit_push(CG::T0);
+        None
+    }
+
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         let field_sym = self.field.sym.get().unwrap();
         let Symbol::Var(ref vs) = **field_sym else { panic!() };
         let offset = vs.offset.get().unwrap();
-        self.obj.codegen_lvalue(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit(("addiu", CG::T0, CG::T0, *offset));
-        cg.emit_push(CG::T0);
+        if let Some(reg) = self.obj.codegen_lvalue_register(cg) {
+            cg.emit(("addiu", &reg, &reg, *offset));
+            cg.emit_push(reg);
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("addiu", CG::T0, CG::T0, *offset));
+            cg.emit_push(CG::T0);
+        }
+    }
+
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
+        let field_sym = self.field.sym.get().unwrap();
+        let Symbol::Var(ref vs) = **field_sym else { panic!() };
+        let offset = vs.offset.get().unwrap();
+        if let Some(reg) = self.obj.codegen_lvalue_register(cg) {
+            cg.emit(("addiu", &reg, &reg, *offset));
+            Some(reg)
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("addiu", CG::T0, CG::T0, *offset));
+            cg.emit_push(CG::T0);
+            None
+        }
     }
 }
 
@@ -541,20 +641,22 @@ impl Ast for AddrExpr {
     fn codegen(&self, cg: &mut Codegen) {
         self.expr.codegen_lvalue(cg);
     }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        self.expr.codegen_lvalue_register(cg)
+    }
 }
 
 impl Expr for AddrExpr {}
 
 pub struct DerefExpr {
     pub ptr: Boxpr,
-    deref_sym: OnceCell<Rc<StructDeclSymbol>>,
 }
 
 impl DerefExpr {
     pub fn new(expr: Boxpr) -> Rc<Self> {
         Rc::new(DerefExpr {
             ptr: expr,
-            deref_sym: OnceCell::new()
         })
     }
 }
@@ -624,7 +726,7 @@ pub struct IndexExpr {
 impl IndexExpr {
     pub fn new(ptr: Boxpr, index: Boxpr) -> Boxpr {
         Rc::new(IndexExpr { 
-            ptr, index, 
+            ptr, index,
             is_ptr: OnceCell::new()
         })
     }
@@ -650,7 +752,7 @@ impl Ast for IndexExpr {
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let ptr_ty = self.ptr.typecheck(tc)?.clone();
         let index_ty = self.index.typecheck(tc)?;
-        if let Type::Reference(ref r) = ptr_ty {
+        if let Type::Reference(_) = ptr_ty {
             self.is_ptr.set(true).unwrap();
         } else {
             self.is_ptr.set(false).unwrap();
@@ -710,18 +812,15 @@ impl Ast for IndexExpr {
         if let Some(r1) = reg {
             if let Some(r2) = self.index.codegen_register(cg) {
                 cg.emit(("li", CG::T0, ty_size));
-                cg.emit(("mul", CG::T0, CG::T0, r2));
-                cg.emit(("add", CG::T0, CG::T0, r1));
+                cg.emit(("mul", CG::T0, CG::T0, &r2));
+                cg.emit(("add", CG::T0, CG::T0, &r1));
                 cg.emit_push(CG::T0);
-                cg.relinquish_reg(r1);
-                cg.relinquish_reg(r2);
             } else {
                 cg.emit(("li", CG::T0, ty_size));
                 cg.emit_pop(CG::T1);
                 cg.emit(("mul", CG::T0, CG::T0, CG::T1));
-                cg.emit(("add", CG::T0, CG::T0, r1));
+                cg.emit(("add", CG::T0, CG::T0, &r1));
                 cg.emit_push(CG::T0);
-                cg.relinquish_reg(r1);
             }
         } else {
             self.index.codegen(cg);
@@ -733,7 +832,8 @@ impl Ast for IndexExpr {
             cg.emit_push(CG::T0);
         }
     }
-    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
         let Some(storage_reg) = cg.next_free_reg() else {
             self.codegen_lvalue(cg);
             return None;
@@ -748,17 +848,14 @@ impl Ast for IndexExpr {
         if let Some(r1) = reg {
             if let Some(r2) = self.index.codegen_register(cg) {
                 cg.emit(("li", CG::T0, ty_size));
-                cg.emit(("mul", CG::T0, CG::T0, r2));
-                cg.emit(("add", r1, CG::T0, r1));
-                cg.relinquish_reg(r2);
-                cg.relinquish_reg(storage_reg);
+                cg.emit(("mul", CG::T0, CG::T0, &r2));
+                cg.emit(("add", &r1, CG::T0, &r1));
                 Some(r1)
             } else {
                 cg.emit(("li", CG::T0, ty_size));
                 cg.emit_pop(CG::T1);
                 cg.emit(("mul", CG::T0, CG::T0, CG::T1));
-                cg.emit(("add", r1, CG::T0, r1));
-                cg.relinquish_reg(storage_reg);
+                cg.emit(("add", &r1, CG::T0, &r1));
                 Some(r1)
             }
         } else {
@@ -767,10 +864,11 @@ impl Ast for IndexExpr {
             cg.emit(("li", CG::T2, ty_size));
             cg.emit(("mul", CG::T1, CG::T1, CG::T2));
             cg.emit_pop(CG::T0);
-            cg.emit(("add", storage_reg, CG::T0, CG::T1));
+            cg.emit(("add", &storage_reg, CG::T0, CG::T1));
             Some(storage_reg)
         }
     }
+
     fn codegen(&self, cg: &mut Codegen) {
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
@@ -779,16 +877,16 @@ impl Ast for IndexExpr {
             4 => "lw",
             _ => todo!()
         };
-        self.codegen_lvalue(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
-        cg.emit_push(CG::T1);
+        if let Some(reg) = self.ptr.codegen_lvalue_register(cg) {
+            cg.emit((load_ins, &reg, &reg, Ix(0)))
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit((load_ins, CG::T0, CG::T0, Ix(0)));
+            cg.emit_push(CG::T0);
+        }
     }
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
-        let Some(reg) = cg.next_free_reg() else {
-            self.codegen(cg);
-            return None;
-        };
+
+    fn codegen_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
         let load_ins = match ty_size {
@@ -796,10 +894,15 @@ impl Ast for IndexExpr {
             4 => "lw",
             _ => todo!()
         };
-        self.codegen_lvalue(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit((load_ins, reg, CG::T0, Ix(0)));
-        Some(reg)
+        if let Some(reg) = self.codegen_lvalue_register(cg) {
+            cg.emit((load_ins, &reg, &reg, Ix(0)));
+            Some(reg)
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit((load_ins, CG::T0, CG::T0, Ix(0)));
+            cg.emit_push(CG::T0);
+            None
+        }
     }
 }
 

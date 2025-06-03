@@ -305,14 +305,16 @@ fn compute_var_offsets(&self, oc: OCtx) {
         // Preamble
         cg.emit(Label(&name));
         // Prologue (save old frame pointer, RA, etc.)
-        cg.emit_push(CG::RA);
-        cg.emit_push(CG::FP);
-        cg.emit_push(CG::T4);
-        cg.emit_push(CG::T5);
-        cg.emit_push(CG::T6);
-        cg.emit_push(CG::T7);
+        cg.emit(("sw", CG::RA, CG::SP, Ix(0)));
+        cg.emit(("sw", CG::FP, CG::SP, Ix(-4)));
+        cg.emit(("sw", CG::T4, CG::SP, Ix(-8)));
+        cg.emit(("sw", CG::T5, CG::SP, Ix(-12)));
+        cg.emit(("sw", CG::T6, CG::SP, Ix(-16)));
+        cg.emit(("sw", CG::T7, CG::SP, Ix(-20)));
         cg.reset_regs();
-        cg.emit(("addu", CG::FP, CG::SP, 24));
+        cg.emit(("move", CG::FP, CG::SP));
+        cg.emit(("addu", CG::SP, CG::SP, -24));
+
         // Make room on stack for top level variables in the frame (includes saved registers)
         let &frame_size = self.frame_size.get().unwrap();
         cg.emit(("subu", CG::SP, CG::SP, frame_size));

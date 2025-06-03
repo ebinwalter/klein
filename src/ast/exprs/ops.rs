@@ -18,7 +18,13 @@ trait BinOp {
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         panic!("Unimplemented binary operator {}", Self::SYMBOL)
     }
-    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type) -> Option<&'static str> {
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        if r1.reg != CG::T0 {
+            cg.emit(("move", CG::T0, r1));
+        }
+        if r2.reg != CG::T1 {
+            cg.emit(("move", CG::T1, r2))
+        }
         self.codegen(cg, lhs_ty);
         None
     }
@@ -137,26 +143,23 @@ impl<T> Ast for T
         } else {
             if let Some(r_lhs) = lhs.codegen_register(cg) {
                 if let Some(r_rhs) = rhs.codegen_register(cg) {
-                    cg.emit(("move", CG::T1, r_rhs));
-                    cg.relinquish_reg(r_rhs);
+                    cg.emit(("move", CG::T1, &r_rhs));
                 } else {
                     cg.emit_pop(CG::T1)
                 }
-                cg.emit(("move", CG::T0, r_lhs));
-                cg.relinquish_reg(r_lhs);
+                cg.emit(("move", CG::T0, &r_lhs));
             } else {
                 rhs.codegen(cg);
                 cg.emit_pop(CG::T1);
                 cg.emit_pop(CG::T0);
             }
-            if let Some(r) = BinOp::codegen_reg(self, cg, &lhs_ty) {
-                cg.emit_push(r);
-                cg.relinquish_reg(r);
+            if let Some(r) = BinOp::codegen_reg(self, cg, &lhs_ty, AllocatedRegister::new(CG::T0), AllocatedRegister::new(CG::T1)) {
+                cg.emit_push(&r);
             }
         }
     }
 
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         let (lhs, rhs) = self.operands();
         let lhs_ty = cg.type_cache.get(lhs.as_ref())
             .expect("type should've been cached during type checking for \
@@ -168,22 +171,19 @@ impl<T> Ast for T
             // logical operators
             BinOp::codegen(self, cg, &lhs_ty);
             None
-        } else {
-            if let Some(r_lhs) = lhs.codegen_register(cg) {
-                if let Some(r_rhs) = rhs.codegen_register(cg) {
-                    cg.emit(("move", CG::T1, r_rhs));
-                    cg.relinquish_reg(r_rhs);
-                } else {
-                    cg.emit_pop(CG::T1)
-                }
-                cg.emit(("move", CG::T0, r_lhs));
-                cg.relinquish_reg(r_lhs);
+        } else if let Some(r_lhs) = lhs.codegen_register(cg) {
+            if let Some(r_rhs) = rhs.codegen_register(cg) {
+                return BinOp::codegen_reg(self, cg, &lhs_ty, r_lhs, r_rhs)
             } else {
-                rhs.codegen(cg);
                 cg.emit_pop(CG::T1);
-                cg.emit_pop(CG::T0);
+                BinOp::codegen_reg(self, cg, &lhs_ty, r_lhs, AllocatedRegister::new(CG::T1))
             }
-            BinOp::codegen_reg(self, cg, &lhs_ty)
+        } else {
+            rhs.codegen(cg);
+            cg.emit_pop(CG::T1);
+            cg.emit_pop(CG::T0);
+            BinOp::codegen(self, cg, &lhs_ty);
+            None
         }
     }
 }
@@ -230,15 +230,11 @@ impl BinOp for Plus {
             _ => unreachable!()
         }
     }
-    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type) -> Option<&'static str> {
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
         match &lhs_ty {
             Type::Int => {
-                let Some(r) = cg.next_free_reg() else {
-                    BinOp::codegen(self, cg, lhs_ty);
-                    return None;
-                };
-                cg.emit(("add", r, CG::T0, CG::T1));
-                Some(r)
+                cg.emit(("add", &r1, &r1, r2));
+                Some(r1)
             },
             _ => unimplemented!()
         }
@@ -396,6 +392,10 @@ impl BinOp for NEQExpr {
         cg.emit(("add", "$t2", "$t2", "$t3"));
         cg.emit(("slt", "$t2", CG::ZERO, "$t2"));
         cg.emit_push("$t2");
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("xor", &r1, &r1, r2));
+        Some(r1)
     }
 }
 

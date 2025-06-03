@@ -7,7 +7,7 @@ use std::fmt::Write;
 use std::cell::{Cell, OnceCell, RefCell};
 use std::borrow::{Borrow, BorrowMut};
 use crate::symbols::*;
-use crate::codegen::*;
+pub use crate::codegen::*;
 
 use lrpar::Span;
 
@@ -30,7 +30,7 @@ pub trait Ast {
     /// The completeness of the annotations depends on how many phases of
     /// compilation have been carried out.
     fn unparse(&self, up: Up);
-    fn unparse_to_string<'r>(&self, ref_text: &'r str) -> String {
+    fn unparse_to_string(&self, ref_text: &str) -> String {
         let mut up = Unparser::new_buf(ref_text);
         self.unparse(&mut up);
         String::from_utf8(up.as_buf().unwrap()).unwrap()
@@ -38,34 +38,34 @@ pub trait Ast {
     /// Record definitions and declarations in the symbol table and associate
     /// various parts of the AST that reference the same symbol.  Also,
     /// determine offsets of members from the base address of a struct.
-    fn analyze_names(&self, na: NACtx) {}
+    fn analyze_names(&self, _na: NACtx) {}
     /// Check that our code has types such that code can actually be generated.
     /// Also resolve the names in struct access expressions.
-    fn typecheck(&self, tc: TCCtx) -> Option<Type> { None }
+    fn typecheck(&self, _tc: TCCtx) -> Option<Type> { None }
     /// Compute offsets for variables declared in functions.
-    fn compute_var_offsets(&self, oc: OCtx) {}
+    fn compute_var_offsets(&self, _oc: OCtx) {}
     /// Generates code for an AST node _unless_ the AST node should be treated
     /// as an lvalue.  In that case, this method will misbehave, and one needs
     /// to call codegen_lvalue instead.
-    fn codegen(&self, cg: &mut Codegen) {
+    fn codegen(&self, _cg: &mut Codegen) {
     }
     /// Generates code for an AST node which outputs to a free temporary register
     /// and returns the label of the register it chose.  If the method returns None,
     /// it means that we couldn't allocate a register, a sub-expression didn't support it,
     /// or this method was unimplemented.  In any case, the result should be on the stack
     /// if the method returned None.
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         self.codegen(cg);
         None
     }
     /// Place the address of this expression on the stack.
-    fn codegen_lvalue(&self, cg: &mut Codegen) {
+    fn codegen_lvalue(&self, _cg: &mut Codegen) {
         // We've written things such that this should never happen.
         // But we should crash and burn if it does happen, because we need to
         // go back and reexamine the structure of things.
         panic!("Attempt to use an unsuitable AST node as an lvalue");
     }
-    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         self.codegen_lvalue(cg);
         None
     }
@@ -454,7 +454,7 @@ impl Ast for Id {
         } 
     }
 
-    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
         let Some(reg) = cg.next_free_reg() else {
             self.codegen(cg);
             return None;
@@ -469,16 +469,16 @@ impl Ast for Id {
                     _ => todo!()
                 };
                 if is_global {
-                    cg.emit(Comment(&format!("Loading value of global variable {} into reg {}", v.id, reg)));
-                    cg.emit((load_ins, reg, Label(format!("_{}", v.id))));
+                    cg.emit(Comment(&format!("Loading value of global variable {} into reg {}", v.id, &reg)));
+                    cg.emit((load_ins, &reg, Label(format!("_{}", v.id))));
                 } else {
-                    cg.emit(Comment(&format!("Loading value of local variable {} into reg {}", v.id, reg)));
-                    cg.emit((load_ins, reg, CG::FP, Ix(*v.offset.get().unwrap())));
+                    cg.emit(Comment(&format!("Loading value of local variable {} into reg {}", v.id, &reg)));
+                    cg.emit((load_ins, &reg, CG::FP, Ix(*v.offset.get().unwrap())));
                 }
                 Some(reg)
             },
             Symbol::Func(ref f) => {
-                cg.emit(("la", reg, Label(format!("_{}", f.id))));
+                cg.emit(("la", &reg, Label(format!("_{}", f.id))));
                 Some(reg)
             },
             _ => unreachable!("struct in expression position"),
@@ -498,7 +498,7 @@ impl Ast for Id {
         cg.emit_push(CG::T0);
     }
 
-    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         let Some(reg) = cg.next_free_reg() else { 
             self.codegen_lvalue(cg);
             return None;
@@ -506,9 +506,9 @@ impl Ast for Id {
         let sym = self.sym.get().unwrap().clone();
         let Symbol::Var(ref v) = *sym else { panic!() };
         if *v.global.get().unwrap() {
-            cg.emit(("la", reg, Label(format!("_{}", v.id))));
+            cg.emit(("la", &reg, Label(format!("_{}", v.id))));
         } else {
-            cg.emit(("addiu", reg, CG::FP, *v.offset.get().unwrap()));
+            cg.emit(("addiu", &reg, CG::FP, *v.offset.get().unwrap()));
         }
         Some(reg)
     }

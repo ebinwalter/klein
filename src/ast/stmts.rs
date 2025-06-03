@@ -41,9 +41,12 @@ impl Ast for IfStmt {
 
     fn codegen(&self, cg: &mut Codegen) {
         let exit_label = cg.next_label();
-        self.cond.codegen(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::ZERO, CG::T0, Label(&exit_label)));
+        if let Some(reg) = self.cond.codegen_register(cg) {
+            cg.emit(("beq", CG::ZERO, reg, Label(&exit_label)));
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("beq", CG::ZERO, CG::T0, Label(&exit_label)));
+        }
         self.body.codegen(cg);
         cg.emit(Label(&exit_label));
     }
@@ -98,9 +101,12 @@ impl Ast for IfElseStmt {
     fn codegen(&self, cg: &mut Codegen) {
         let else_label = &cg.next_label(); 
         let exit_label = &cg.next_label();
-        self.cond.codegen(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::T0, CG::ZERO, Label(else_label)));
+        if let Some(reg) = self.cond.codegen_register(cg) {
+            cg.emit(("beq", reg, CG::ZERO, Label(else_label)));
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("beq", CG::T0, CG::ZERO, Label(else_label)));
+        }
         self.then_body.codegen(cg);
         cg.emit(("j", Label(exit_label)));
         cg.emit(Label(else_label));
@@ -155,9 +161,12 @@ impl Ast for WhileStmt {
         let string_cond = self.cond.unparse_to_string(cg.ref_text);
         cg.emit(Comment(&format!("while {}", &string_cond)));
         cg.emit(Label(check_label));
-        self.cond.codegen(cg);
-        cg.emit_pop(CG::T0);
-        cg.emit(("beq", CG::T0, CG::ZERO, Label(end_label)));
+        if let Some(reg) = self.cond.codegen_register(cg) {
+            cg.emit(("beq", reg, CG::ZERO, Label(end_label)));
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("beq", CG::T0, CG::ZERO, Label(end_label)));
+        }
         self.body.codegen(cg);
         cg.emit(("j", Label(check_label)));
         cg.emit(Comment(&format!("end of while {}", &string_cond)));
@@ -239,8 +248,8 @@ impl Ast for ExprStmt {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        if let Some(reg) = self.expr.codegen_register(cg) {
-            cg.relinquish_reg(reg);
+        if let Some(r) = self.expr.codegen_register(cg) {
+            drop(r);
         } else {
             cg.emit_pop(CG::ZERO);
         }
@@ -376,7 +385,6 @@ impl Ast for OutputStmt {
             Type::Int => {
                 if let Some(reg) = self.expr.codegen_register(cg) {
                     cg.emit(("move", CG::A0, reg));
-                    cg.relinquish_reg(reg);
                 } else {
                     cg.emit_pop(CG::A0);
                 }
@@ -392,17 +400,18 @@ impl Ast for OutputStmt {
             Type::Array(deref!(Type::Char), _) => {
                 if let Some(reg) = self.expr.codegen_lvalue_register(cg) {
                     cg.emit(("move", CG::A0, reg));
-                    cg.relinquish_reg(reg);
                 } else {
                     cg.emit_pop(CG::A0);
                 }
-                cg.emit_pop(CG::A0);
                 cg.emit(("li", CG::V0, 4));
                 cg.emit("syscall");
             },
             Type::Reference(deref!(Type::Char)) => {
-                self.expr.codegen(cg);
-                cg.emit_pop(CG::A0);
+                if let Some(reg) = self.expr.codegen_register(cg) {
+                    cg.emit(("move", CG::A0, reg));
+                } else {
+                    cg.emit_pop(CG::A0);
+                }
                 cg.emit(("li", CG::V0, 4));
                 cg.emit("syscall");
             },

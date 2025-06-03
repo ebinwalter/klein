@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::Write};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, io::Write, rc::Rc};
 
 use lrpar::Span;
 
@@ -8,11 +8,22 @@ pub struct Codegen<'a> {
     next_label: usize,
     string_table: HashMap<String, String>,
     pub ref_text: &'a str,
-    free_regs: Vec<&'static str>,
+    free_regs: RegList, 
     pub type_cache: TypeCache,
     pub function_stack: Vec<String>
 }
 
+pub trait Register: std::fmt::Display {
+    fn str(&self) -> &'static str;
+}
+
+impl Register for &'static str {
+    fn str(&self) -> &'static str {
+        self
+    }
+}
+
+#[allow(dead_code)]
 impl<'a> Codegen<'a> {
     pub const T0: &'static str = "$t0";
     pub const T1: &'static str = "$t1";
@@ -36,7 +47,7 @@ impl<'a> Codegen<'a> {
             next_label: 0,
             ref_text: text,
             string_table: HashMap::new(),
-            free_regs: Vec::new(),
+            free_regs: Rc::new(RefCell::new(Vec::new())),
             type_cache: cache,
             function_stack: Vec::new(),
         }
@@ -51,15 +62,15 @@ impl<'a> Codegen<'a> {
     pub fn next_label(&mut self) -> String {
         let label = self.next_label;
         self.next_label += 1;
-        format!("L{}", label)
+        format!("L{label}")
     }
 
-    pub fn emit_push(&mut self, reg: &str) {
+    pub fn emit_push(&mut self, reg: impl Register) {
         self.emit(("sw", reg, Self::SP, Ix(0)));
         self.emit(("addiu", Self::SP, Self::SP, -4));
     }
 
-    pub fn emit_pop(&mut self, reg: &str) {
+    pub fn emit_pop(&mut self, reg: impl Register) {
         self.emit(("lw", reg, Self::SP, Ix(4)));
         self.emit(("addiu", Self::SP, Self::SP, 4));
     }
@@ -78,16 +89,51 @@ impl<'a> Codegen<'a> {
     }
 
     pub fn reset_regs(&mut self) {
-        self.free_regs = vec![CG::T4, CG::T5, CG::T6, CG::T7];
+        *self.free_regs.borrow_mut() = vec![CG::T4, CG::T5, CG::T6, CG::T7];
     }
 
-    pub fn next_free_reg(&mut self) -> Option<&'static str> {
-        dbg!(&self.free_regs);
-        self.free_regs.pop()
+    pub fn next_free_reg(&mut self) -> Option<AllocatedRegister> {
+        self.free_regs.borrow_mut().pop()
+            .map(|reg| AllocatedRegister {reg, list: Some(self.free_regs.clone())})
     }
+}
 
-    pub fn relinquish_reg(&mut self, reg: &'static str) {
-        self.free_regs.push(reg);
+type RegList = Rc<RefCell<Vec<&'static str>>>;
+
+pub struct AllocatedRegister {
+    pub reg: &'static str,
+    list: Option<RegList>,
+}
+
+impl AllocatedRegister {
+    pub fn new(reg: &'static str) -> Self {
+        AllocatedRegister { reg, list: None }
+    }
+}
+
+impl Register for &AllocatedRegister {
+    fn str(&self) -> &'static str {
+        self.reg
+    }
+}
+
+impl Register for AllocatedRegister {
+    fn str(&self) -> &'static str {
+        self.reg
+    }
+}
+
+impl Display for AllocatedRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.reg)
+    }
+}
+
+impl Drop for AllocatedRegister {
+    fn drop(&mut self) {
+        if let Some(ref list) = self.list {
+            list.try_borrow_mut().unwrap().push(self.reg);
+        }
     }
 }
 
@@ -118,9 +164,9 @@ impl Emittable for Box<dyn Emittable> {
     }
 }
 
-impl Emittable for (&str, &str, &str) {
+impl<T: Register, U: Register> Emittable for (&str, T, U) {
     fn emit(&self) -> String {
-        format!("\t{} {}, {}\n", self.0, self.1, self.2)
+        format!("\t{} {}, {}\n", self.0, self.1.str(), self.2.str())
     }
 }
 
@@ -130,49 +176,53 @@ impl<T: AsRef<str>> Emittable for (&str, Label<T>) {
     }
 } 
 
-impl<T: AsRef<str>> Emittable for (&str, &str, Label<T>) {
+impl<S: Register, T: AsRef<str>> Emittable for (&str, S, Label<T>) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2.0.as_ref())
     }
 } 
 
-impl Emittable for (&str, &str, &str, i32) {
+impl<T: Register, U: Register> Emittable for (&str, T, U, i32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
     }
 }
 
-impl Emittable for (&str, &str, i32) {
+impl<U: Register> Emittable for (&str, U, i32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
-impl Emittable for (&str, &str, u32) {
+impl<U: Register> Emittable for (&str, U, u32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
-impl Emittable for (&str, &str, &str, Ix) {
+impl<T: Register, U: Register> Emittable for (&str, T, U, Ix) {
     fn emit(&self) -> String {
-        format!("\t{} {}, {}({})\n", self.0, self.1, self.3.0, self.2)
+        format!("\t{} {}, {}({})\n", self.0, self.1, self.3.0, self.2.str())
     }
 }
 
-impl Emittable for (&str, &str, &str, u32) {
-    fn emit(&self) -> String {
-        format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
-    }
-}
-
-impl Emittable for (&str, &str, &str, &str) {
+impl<T: Register, U: Register> Emittable for (&str, T, U, u32) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3)
     }
 }
 
-impl<T: AsRef<str>> Emittable for (&str, &str, &str, Label<T>) {
+impl<T, U, V> Emittable for (&str, T, U, V)
+    where T: Register,
+          U: Register,
+          V: Register
+{
+    fn emit(&self) -> String {
+        format!("\t{} {}, {}, {}\n", self.0, self.1.str(), self.2.str(), self.3.str())
+    }
+}
+
+impl<T: AsRef<str>, U: Register, V: Register> Emittable for (&str, U, V, Label<T>) {
     fn emit(&self) -> String {
         format!("\t{} {}, {}, {}\n", self.0, self.1, self.2, self.3.0.as_ref())
     }
@@ -217,7 +267,7 @@ impl Emittable for Directive {
     fn emit(&self) -> String {
         match self {
             Self::Data => ".data\n".into(),
-            Self::Asciiz(s) => format!(".asciiz {}\n", s),
+            Self::Asciiz(s) => format!(".asciiz {s}\n"),
             Self::Text => ".text\n".into(),
             Self::Space(size) => format!(".space {size}\n")
         }

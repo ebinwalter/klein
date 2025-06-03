@@ -1,10 +1,10 @@
 fun strcpy(char *dest, char *src) {
   int ix = 0;
-  while src[ix] != ""[0] {
+  while src[ix] != '\0' {
     dest[ix] = src[ix];
     ix = ix + 1;
   }
-  dest[ix] = ""[0];
+  dest[ix] = '\0';
 }
 
 // Requires char literals to compile
@@ -27,9 +27,6 @@ fun strlen(char *s) -> int {
   return i;
 }
 
-int cmp1;
-int cmp2;
-
 // assumes head has enough space to accommodate tail
 fun strcat(char *head, char *tail) {
   int len = strlen(head);
@@ -47,9 +44,10 @@ char[20] usual_buf;
 fun main() {
   char *snupis = &snup_buf[0];
   char *usual = &usual_buf[0];
-  cmp1 = strlen("Hflonger");
-  strcpy(snupis, "snoopingas");
-  strcpy(usual, "usual icy");
+  out <- strlen("Hfeflflfo");
+  out <- "\n";
+  strcpy(snupis, "hello ");
+  strcpy(usual, "user");
   strcat(snupis, usual);
   strcat(snupis, "\n");
   out <- snupis;

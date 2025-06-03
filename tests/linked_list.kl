@@ -4,9 +4,7 @@ struct LinkedList {
 }
 
 int count_1;
-// should find 20 @ 0x10010010
 int count_2;
-// should find 290 @ 0x10010020
 int sum_2;
 struct LinkedList[50] ll_heap;
 

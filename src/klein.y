@@ -48,6 +48,14 @@ Decl -> Result<BoxDecl, ()>
 VarDecl -> Result<BoxDecl, ()>
   : Type Id ';' { Ok(VarDecl::new($1?, $2?, None))}
   | Type Id '=' Expr ';' { Ok(VarDecl::new($1?, $2?, Some($4?)))}
+  | 'FUN' Id '(' BareTypeList ')' FunOutput ';' { 
+    let fun_ty = Type::FunPtr($4?, $6?);
+    Ok(VarDecl::new(fun-ty, $2?, None))
+  }
+  | 'FUN' Id '(' BareTypeList ')' FunOutput '=' Expr ';' { 
+    let fun_ty = Type::FunPtr($4?, $6?);
+    Ok(VarDecl::new(fun_ty, $2?, Some($8?));
+  }
   ;
 
 StructDecl -> Result<BoxDecl, ()>: 
@@ -65,7 +73,7 @@ FunDecl -> Result<BoxDecl, ()>
   ;
 
 FunOutput -> Result<Type, ()>
-  : 'ARROW' Type { $2 }
+  : 'ARROW' BareType { $2 }
   | { Ok(Type::Void) }
   ;
 
@@ -76,6 +84,10 @@ FunFormals -> Result<Vec<Rc<FormalParam>>, ()>
 
 FormalParam -> Result<Rc<FormalParam>, ()>
   : Type Id { Ok(FormalParam::new($1?, $2?)) }
+  | 'FUN' Id '(' BareTypeList ')' FunOutput
+  {
+    Ok(FormalParam::new(Type::FunPtr($4?, $6?), $2?))
+  }
   | 'SELF_PARAM' 
   { 
     let span = $1.map_err(|_| ())?.span();
@@ -108,6 +120,23 @@ Type -> Result<Type, ()>:
   | 'PRIM_DOUBLE' { Ok(Type::Double) }
   | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
   | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
+  ;
+
+BareType -> Result<Type, ()>:
+    'STRUCT' Id { Ok(Type::Struct($2?, OnceCell::new())) }
+  | 'VOID' { Ok(Type::Void) }
+  | 'PRIM_INT' { Ok(Type::Int) }
+  | 'PRIM_BOOL' { Ok(Type::Bool) }
+  | 'PRIM_CHAR' { Ok(Type::Char) }
+  | 'PRIM_DOUBLE' { Ok(Type::Double) }
+  | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
+  | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
+  | 'FUN' '(' BareTypeList ')' FunOutput { Ok(Type::Fun($3, Rc::new($5?))) }
+  ;
+
+BareTypeList -> Result<Vec<Type>, ()>:
+      { Ok(vec![]) }
+  | BareTypeList ',' BareType { flatten($1, $3) }
   ;
 
 Stmt -> Result<BoxStmt, ()>

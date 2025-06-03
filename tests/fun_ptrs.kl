@@ -1,4 +1,4 @@
-fun sort(fun comparer(void *, void *) -> int, void *data, int item_size, int num_items);
+fun sort(fun comparer(void *, void *) -> int, void *data, int intem_size, int num_items);
 
 fun proxy(fun int_fun(int, int) -> int, int x, int y) -> int {
   return int_fun(x, y);
@@ -17,25 +17,20 @@ struct Freeable {
   fun free(void *);
 }
 
-fun free_freeable(struct Freeable *f) {
+fun free_freeable(Freeable *f) {
   fun freer(void *) = f.free;
   freer(f.item);
 }
 
-fun get_freer(struct Freeable *f) -> fun(void *) {
-  return f.free;
+fun get_freer(Freeable *f) -> fun(void *) {
 }
 
-fun free_noop(void *x) {
-  out <- "free again to do as i please\n";
-}
+fun free_noop(void *) {}
 
 fun main() {
   struct Freeable f;
   f.item = 1;
   f.free = free_noop;
-
-  free_freeable(&f);
 
   out <- proxy(add2, 5, 10);
   out <- proxy(sub2, 10, 5);

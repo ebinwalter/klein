@@ -11,7 +11,6 @@ pub enum Type {
     SelfRef,
     Reference(Rc<Type>),
     Array(Rc<Type>, u32),
-    FunPtr(Vec<Type>, Rc<Type>)
 }
 
 impl Type {

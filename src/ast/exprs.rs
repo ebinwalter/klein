@@ -362,23 +362,14 @@ impl Ast for CallExpr {
         for expr in self.args.iter() {
             expr.analyze_names(na);
         }
-        if let Some(sym) = self.fun.symbol_rc() {
-            let sym = sym.clone();
-            if let Symbol::Func(ref f) = *sym {
-                self.fun_sym.set(f.clone())
-                    .expect("Attempt to re-set symbol for function call");
-            } else {
-                na.raise_error((self.fun.clone() as Rc<dyn Ast>).borrow(), "Attempt to call non-function".to_owned());
-            }
-        }
     }
 
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
-        let fun_arg_types = &self.fun_sym
-            .get()
-            .expect("Unset fun symbol after name analysis phase")
-            .arg_types;
-        let n1 = fun_arg_types.len();
+        let Some(Type::FunPtr(fun_args, deref!(ref ret_ty))) = self.fun.typecheck(tc) else {
+            tc.raise_error(self.fun.clone(), "Attempt to call a non-function".into());
+            return None;
+        };
+        let n1 = fun_args.len();
         let n2 = self.args.len();
         if n1 != n2 {
             let m = format!("This function takes {n1} arguments, but {n2} were provided");
@@ -386,15 +377,15 @@ impl Ast for CallExpr {
         } else {
             for (i, e1) in self.args.iter().enumerate() {
                 let Some(t1) = e1.typecheck(tc) else { continue };
-                let t2 = &fun_arg_types[i];
+                let t2 = &fun_args[i];
                 let arg_no = i + 1;
-                if t1 != *t2 {
-                    let m = format!("argument #{arg_no} should be of type {t2}, but a {t1} was given");
+                if !t1.is_subtype_of(t2) {
+                    let m = format!("argument #{arg_no} should be a subtype of {t2}, but a {t1} was given");
                     tc.raise_error(e1.clone(), m);
                 }
             }
         }
-        Some(self.fun_sym.get().unwrap().return_type.clone())
+        Some(ret_ty.clone())
     }
 
     fn code_location(&self) -> Option<(usize, usize)> {

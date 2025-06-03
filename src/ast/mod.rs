@@ -405,18 +405,11 @@ impl Ast for Id {
         if let Symbol::Var(vs) = &**self.sym.get().unwrap() {
             let ty = (*vs.ty).clone();
             
-            // Check if this is a struct type being used in an rvalue position
-            /*
-            if let Type::Struct(_, _) = ty {
-                tc.raise_error(
-                    Rc::new(self.clone()),
-                    "Struct variables cannot be used directly in expressions. Consider using a reference (&) or accessing a field.".into()
-                );
-                return None;
-            }
-            */
-            
             Some(ty)
+        } else if let Symbol::Func(fs) = &**self.sym.get().unwrap() {
+            // If we call `typecheck` on a function, we're using it like a value
+            // It would have this type
+            Some(Type::FunPtr(fs.arg_types.clone(), fs.return_type.clone().into()))
         } else {
             tc.raise_error(Rc::new(self.clone()), "Attempted to check the type of a non-variable".into());
             None

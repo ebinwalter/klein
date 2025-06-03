@@ -26,6 +26,7 @@ impl Type {
             Self::Void => 4,
             Self::Reference(_) => 4,
             Self::Array(t, count) => t.size() * count,
+            Self::FunPtr(_, _) => 4,
             _ => todo!()
         }
     }
@@ -43,6 +44,18 @@ impl Type {
                 (Self::Void, _) => true,
                 (_, Self::Void) => true,
                 (a, b) => a.is_subtype_of(b)
+            }
+            (Self::FunPtr(args1, r1), Self::FunPtr(args2, r2)) => {
+                if args1.len() != args2.len() {
+                    return false;
+                }
+                for (ix, arg) in args1.iter().enumerate() {
+                    // This isn't backwards:  
+                    if !args2[ix].is_subtype_of(arg) {
+                        return false;
+                    }
+                }
+                r1.is_subtype_of(r2)
             }
             // Arrays are internally represented as pointers, but we don't want
             // to let users arbitrarily convert pointers into sized arrays
@@ -133,6 +146,18 @@ impl Ast for Type {
             Type::Array(ty, count) => {
                 ty.unparse(up);
                 up.write(&format!("[{count}]"));
+            },
+            Type::FunPtr(arg_types, ret_ty) => {
+                up.write("fun(");
+                let mut i = arg_types.iter();
+                while let Some(arg) = i.next() {
+                    arg.unparse(up);
+                    if i.len() > 0 {
+                        up.write(", ");
+                    }
+                }
+                up.write(") -> ");
+                ret_ty.unparse(up);
             }
         }
     }
@@ -164,6 +189,10 @@ impl Ast for Type {
             }
             Type::Reference(ty) => {
                 ty.analyze_names(na);
+            }
+            Type::FunPtr(args, ret_ty) => {
+                args.iter().for_each(|x| x.analyze_names(na));
+                ret_ty.analyze_names(na);
             }
             Type::Int | Type::Bool | Type::Char
                 | Type::Double => (),

@@ -1,3 +1,5 @@
+use std::io::BufWriter;
+
 use crate::ast::*;
 use crate::codegen::*;
 
@@ -29,6 +31,7 @@ impl<T> Ast for T
         let (lhs, rhs) = self.operands();
         unparse_op(up, Self::SYMBOL, lhs, rhs);
     }
+
     
     fn analyze_names(&self, na: NACtx) {
         let (lhs, rhs) = self.operands();
@@ -142,6 +145,8 @@ impl<T> Ast for T
                 cg.emit(("move", CG::T0, r_lhs));
                 cg.relinquish_reg(r_lhs);
             } else {
+                rhs.codegen(cg);
+                cg.emit_pop(CG::T1);
                 cg.emit_pop(CG::T0);
             }
             if let Some(r) = BinOp::codegen_reg(self, cg, &lhs_ty) {
@@ -174,6 +179,8 @@ impl<T> Ast for T
                 cg.emit(("move", CG::T0, r_lhs));
                 cg.relinquish_reg(r_lhs);
             } else {
+                rhs.codegen(cg);
+                cg.emit_pop(CG::T1);
                 cg.emit_pop(CG::T0);
             }
             BinOp::codegen_reg(self, cg, &lhs_ty)

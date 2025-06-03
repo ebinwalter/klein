@@ -7,7 +7,8 @@ pub struct Codegen<'a> {
     output: Box<dyn Write>,
     next_label: usize,
     string_table: HashMap<String, String>,
-    ref_text: &'a str,
+    pub ref_text: &'a str,
+    free_regs: Vec<&'static str>,
     pub type_cache: TypeCache,
     pub function_stack: Vec<String>
 }
@@ -35,6 +36,7 @@ impl<'a> Codegen<'a> {
             next_label: 0,
             ref_text: text,
             string_table: HashMap::new(),
+            free_regs: Vec::new(),
             type_cache: cache,
             function_stack: Vec::new(),
         }
@@ -75,12 +77,17 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    pub fn reset_regs(&mut self) {
+        self.free_regs = vec![CG::T4, CG::T5, CG::T6, CG::T7];
+    }
+
     pub fn next_free_reg(&mut self) -> Option<&'static str> {
-        todo!();
+        dbg!(&self.free_regs);
+        self.free_regs.pop()
     }
 
     pub fn relinquish_reg(&mut self, reg: &'static str) {
-        todo!();
+        self.free_regs.push(reg);
     }
 }
 

@@ -16,6 +16,8 @@ fun main() {
     ll_heap[i].next = &ll_heap[i+1];
     ll_heap[i].item = i;
     i = i + 1;
+    out <- i;
+    out <- "\n";
   }
   ll_heap[9].next = null;
   int count = 0;

@@ -311,6 +311,7 @@ fn compute_var_offsets(&self, oc: OCtx) {
         cg.emit_push(CG::T5);
         cg.emit_push(CG::T6);
         cg.emit_push(CG::T7);
+        cg.reset_regs();
         cg.emit(("addu", CG::FP, CG::SP, 24));
         // Make room on stack for top level variables in the frame (includes saved registers)
         let &frame_size = self.frame_size.get().unwrap();

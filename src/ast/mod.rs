@@ -65,6 +65,10 @@ pub trait Ast {
         // go back and reexamine the structure of things.
         panic!("Attempt to use an unsuitable AST node as an lvalue");
     }
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        self.codegen_lvalue(cg);
+        None
+    }
     /// Return a canonical symbol associated with this AST node.
     /// For example, if this is an ID, give the VarDecl symbol associated with
     /// its definition; if this is an AST node for a `struct X` type, give the StructDeclSymbol
@@ -450,6 +454,37 @@ impl Ast for Id {
         } 
     }
 
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(reg) = cg.next_free_reg() else {
+            self.codegen(cg);
+            return None;
+        };
+        let sym = self.sym.get().unwrap().clone();
+        match *sym {
+            Symbol::Var(ref v) => {
+                let &is_global = v.global.get().unwrap();
+                let load_ins = match v.ty.size() {
+                    1 => "lb",
+                    4 => "lw",
+                    _ => todo!()
+                };
+                if is_global {
+                    cg.emit(Comment(&format!("Loading value of global variable {} into reg {}", v.id, reg)));
+                    cg.emit((load_ins, reg, Label(format!("_{}", v.id))));
+                } else {
+                    cg.emit(Comment(&format!("Loading value of local variable {} into reg {}", v.id, reg)));
+                    cg.emit((load_ins, reg, CG::FP, Ix(*v.offset.get().unwrap())));
+                }
+                Some(reg)
+            },
+            Symbol::Func(ref f) => {
+                cg.emit(("la", reg, Label(format!("_{}", f.id))));
+                Some(reg)
+            },
+            _ => unreachable!("struct in expression position"),
+        } 
+    }
+
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         let sym = self.sym.get().unwrap().clone();
         let Symbol::Var(ref v) = *sym else { return };
@@ -461,6 +496,21 @@ impl Ast for Id {
             cg.emit(("addiu", CG::T0, CG::FP, *v.offset.get().unwrap()));
         }
         cg.emit_push(CG::T0);
+    }
+
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(reg) = cg.next_free_reg() else { 
+            self.codegen_lvalue(cg);
+            return None;
+        };
+        let sym = self.sym.get().unwrap().clone();
+        let Symbol::Var(ref v) = *sym else { panic!() };
+        if *v.global.get().unwrap() {
+            cg.emit(("la", reg, Label(format!("_{}", v.id))));
+        } else {
+            cg.emit(("addiu", reg, CG::FP, *v.offset.get().unwrap()));
+        }
+        Some(reg)
     }
 }
 

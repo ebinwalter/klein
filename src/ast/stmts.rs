@@ -152,6 +152,7 @@ impl Ast for WhileStmt {
     fn codegen(&self, cg: &mut Codegen) {
         let check_label = &cg.next_label();
         let end_label = &cg.next_label();
+        cg.emit(Comment(&format!("while {}", self.cond.unparse_to_string(cg.ref_text))));
         cg.emit(Label(check_label));
         self.cond.codegen(cg);
         cg.emit_pop(CG::T0);
@@ -236,8 +237,11 @@ impl Ast for ExprStmt {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        self.expr.codegen(cg);
-        cg.emit_pop(CG::ZERO);
+        if let Some(reg) = self.expr.codegen_register(cg) {
+            cg.relinquish_reg(reg);
+        } else {
+            cg.emit_pop(CG::ZERO);
+        }
     }
 } 
 

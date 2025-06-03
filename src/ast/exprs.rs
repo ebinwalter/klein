@@ -238,23 +238,63 @@ impl Ast for AssignExpr {
     }
 
     fn codegen(&self, cg: &mut Codegen) {
-        cg.emit(Comment("Generating lvalue for assignment"));
-        self.loc.codegen_lvalue(cg);
-        cg.emit(Comment("Generating rvalue for assignment"));
-        self.value.codegen(cg);
-        cg.emit_pop(CG::T1);
-        cg.emit_pop(CG::T0);
-        // Adjust instruction for storing a value based
-        // on the expression's size
         let store_ins = match cg.type_cache.get(self).unwrap().size() {
             1 => "sb",
             4 => "sw",
             _ => todo!()
         };
-        cg.emit((store_ins, CG::T1, CG::T0, Ix(0)));
-        
-        cg.emit(Comment("Putting value back on stack (for chains)"));
-        cg.emit_push(CG::T1);
+        if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
+            if let Some(val_reg) = self.value.codegen_register(cg) {
+                cg.emit((store_ins, val_reg, loc_reg, Ix(0)));
+                cg.relinquish_reg(loc_reg);
+                cg.emit_push(val_reg);
+                cg.relinquish_reg(val_reg);
+            } else {
+                self.value.codegen(cg);
+                cg.emit_pop(CG::T0);
+                cg.emit((store_ins, CG::T0, loc_reg, Ix(0)));
+                cg.relinquish_reg(loc_reg);
+                cg.emit_push(CG::T0);
+            }
+        } else {
+            self.value.codegen(cg);
+            cg.emit_pop(CG::T0);
+            cg.emit_pop(CG::T1);
+            cg.emit((store_ins, CG::T0, CG::T1, Ix(0)));
+            cg.emit_push(CG::T0);
+        }
+    }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(storage_reg) = cg.next_free_reg() else {
+            self.codegen(cg);
+            return None;
+        };
+        let store_ins = match cg.type_cache.get(self).unwrap().size() {
+            1 => "sb",
+            4 => "sw",
+            _ => todo!()
+        };
+        if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
+            if let Some(val_reg) = self.value.codegen_register(cg) {
+                cg.emit((store_ins, val_reg, loc_reg, Ix(0)));
+                cg.relinquish_reg(loc_reg);
+                cg.relinquish_reg(storage_reg);
+                Some(val_reg)
+            } else {
+                self.value.codegen(cg);
+                cg.emit_pop(storage_reg);
+                cg.emit((store_ins, storage_reg, loc_reg, Ix(0)));
+                cg.relinquish_reg(loc_reg);
+                Some(storage_reg)
+            }
+        } else {
+            self.value.codegen(cg);
+            cg.emit_pop(storage_reg);
+            cg.emit_pop(CG::T1);
+            cg.emit((store_ins, storage_reg, CG::T1, Ix(0)));
+            Some(storage_reg)
+        }
     }
 }
 
@@ -433,15 +473,20 @@ impl Ast for AccessExpr {
         let Symbol::Var(ref vs) = **field_sym else { panic!() };
         let offset = vs.offset.get().unwrap();
         if let Some(Type::Reference(_)) = cg.type_cache.get(&*self.obj) {
-            self.obj.codegen(cg);
+            if let Some(r) = self.obj.codegen_register(cg) {
+                cg.emit(("move", CG::T0, r));
+                cg.relinquish_reg(r);
+            } else {
+                self.obj.codegen(cg);
+                cg.emit_pop(CG::T0);
+            }
+        } else if let Some(r) = self.obj.codegen_lvalue_register(cg) {
+            cg.emit(("move", CG::T0, r));
+            cg.relinquish_reg(r);
         } else {
             self.obj.codegen_lvalue(cg);
+            cg.emit_pop(CG::T0);
         }
-        cg.emit_pop(CG::T0);
-        // --- BEGIN CHANGES ---
-        // Added: Check the field's type to choose 'lb' for char (1-byte) or 'lw' for others.
-        // This ensures byte-level loading for struct fields of type char, fixing alignment.
-        // Previously, it always used 'lw', which could cause issues for 1-byte fields.
         let load_instr = if let Type::Char = *vs.ty { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
         cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
@@ -635,23 +680,96 @@ impl Ast for IndexExpr {
         self.ptr.code_location()
     }
 
+    // fn codegen_lvalue(&self, cg: &mut Codegen) {
+    //     let ty = cg.type_cache.get(self).unwrap();
+    //     let ty_size = ty.size();
+    //     if *self.is_ptr.get().unwrap() {
+    //         if let Some(r) = self.ptr.codegen_register(cg) {
+    //         }
+    //         self.ptr.codegen(cg);   
+    //     } else {
+    //         self.ptr.codegen_lvalue(cg);
+    //     }
+    //     self.index.codegen(cg);
+    //     cg.emit_pop(CG::T1);
+    //     cg.emit(("li", CG::T2, ty_size));
+    //     cg.emit(("mul", CG::T1, CG::T1, CG::T2));
+    //     cg.emit_pop(CG::T0);
+    //     cg.emit(("add", CG::T0, CG::T0, CG::T1));
+    //     cg.emit_push(CG::T0);
+    // }
+
     fn codegen_lvalue(&self, cg: &mut Codegen) {
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
-        if *self.is_ptr.get().unwrap() {
-            self.ptr.codegen(cg);   
+        let reg = if *self.is_ptr.get().unwrap() {
+            self.ptr.codegen_register(cg)
         } else {
-            self.ptr.codegen_lvalue(cg);
+            self.ptr.codegen_lvalue_register(cg)
+        };
+        if let Some(r1) = reg {
+            if let Some(r2) = self.index.codegen_register(cg) {
+                cg.emit(("li", CG::T0, ty_size));
+                cg.emit(("mul", CG::T0, CG::T0, r2));
+                cg.emit(("add", CG::T0, CG::T0, r1));
+                cg.emit_push(CG::T0);
+                cg.relinquish_reg(r1);
+                cg.relinquish_reg(r2);
+            } else {
+                cg.emit(("li", CG::T0, ty_size));
+                cg.emit_pop(CG::T1);
+                cg.emit(("mul", CG::T0, CG::T0, CG::T1));
+                cg.emit(("add", CG::T0, CG::T0, r1));
+                cg.relinquish_reg(r1);
+            }
+        } else {
+            self.index.codegen(cg);
+            cg.emit_pop(CG::T1);
+            cg.emit(("li", CG::T2, ty_size));
+            cg.emit(("mul", CG::T1, CG::T1, CG::T2));
+            cg.emit_pop(CG::T0);
+            cg.emit(("add", CG::T0, CG::T0, CG::T1));
+            cg.emit_push(CG::T0);
         }
-        self.index.codegen(cg);
-        cg.emit_pop(CG::T1);
-        cg.emit(("li", CG::T2, ty_size));
-        cg.emit(("mul", CG::T1, CG::T1, CG::T2));
-        cg.emit_pop(CG::T0);
-        cg.emit(("add", CG::T0, CG::T0, CG::T1));
-        cg.emit_push(CG::T0);
     }
-
+    fn codegen_lvalue_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(storage_reg) = cg.next_free_reg() else {
+            self.codegen_lvalue(cg);
+            return None;
+        };
+        let ty = cg.type_cache.get(self).unwrap();
+        let ty_size = ty.size();
+        let reg = if *self.is_ptr.get().unwrap() {
+            self.ptr.codegen_register(cg)
+        } else {
+            self.ptr.codegen_lvalue_register(cg)
+        };
+        if let Some(r1) = reg {
+            if let Some(r2) = self.index.codegen_register(cg) {
+                cg.emit(("li", CG::T0, ty_size));
+                cg.emit(("mul", CG::T0, CG::T0, r2));
+                cg.emit(("add", r1, CG::T0, r1));
+                cg.relinquish_reg(r2);
+                cg.relinquish_reg(storage_reg);
+                Some(r1)
+            } else {
+                cg.emit(("li", CG::T0, ty_size));
+                cg.emit_pop(CG::T1);
+                cg.emit(("mul", CG::T0, CG::T0, CG::T1));
+                cg.emit(("add", r1, CG::T0, r1));
+                cg.relinquish_reg(storage_reg);
+                Some(r1)
+            }
+        } else {
+            self.index.codegen(cg);
+            cg.emit_pop(CG::T1);
+            cg.emit(("li", CG::T2, ty_size));
+            cg.emit(("mul", CG::T1, CG::T1, CG::T2));
+            cg.emit_pop(CG::T0);
+            cg.emit(("add", storage_reg, CG::T0, CG::T1));
+            Some(storage_reg)
+        }
+    }
     fn codegen(&self, cg: &mut Codegen) {
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
@@ -664,6 +782,23 @@ impl Ast for IndexExpr {
         cg.emit_pop(CG::T0);
         cg.emit((load_ins, CG::T1, CG::T0, Ix(0)));
         cg.emit_push(CG::T1);
+    }
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<&'static str> {
+        let Some(reg) = cg.next_free_reg() else {
+            self.codegen(cg);
+            return None;
+        };
+        let ty = cg.type_cache.get(self).unwrap();
+        let ty_size = ty.size();
+        let load_ins = match ty_size {
+            1 => "lb",
+            4 => "lw",
+            _ => todo!()
+        };
+        self.codegen_lvalue(cg);
+        cg.emit_pop(CG::T0);
+        cg.emit((load_ins, reg, CG::T0, Ix(0)));
+        Some(reg)
     }
 }
 

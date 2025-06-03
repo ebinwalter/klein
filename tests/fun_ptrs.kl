@@ -12,7 +12,26 @@ fun sub2(int x, int y) -> int {
   return x - y;
 }
 
+struct Freeable {
+  void *item;
+  fun free(void *);
+}
+
+fun free_freeable(Freeable *f) {
+  fun freer(void *) = f.free;
+  freer(f.item);
+}
+
+fun get_freer(Freeable *f) -> fun(void *) {
+}
+
+fun free_noop(void *) {}
+
 fun main() {
+  struct Freeable f;
+  f.item = 1;
+  f.free = free_noop;
+
   out <- proxy(add2, 5, 10);
   out <- proxy(sub2, 10, 5);
 }

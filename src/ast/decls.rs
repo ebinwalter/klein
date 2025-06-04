@@ -307,14 +307,10 @@ fn compute_var_offsets(&self, oc: OCtx) {
         // Prologue (save old frame pointer, RA, etc.)
         cg.emit(("sw", CG::RA, CG::SP, Ix(0)));
         cg.emit(("sw", CG::FP, CG::SP, Ix(-4)));
-        cg.emit(("sw", CG::T4, CG::SP, Ix(-8)));
-        cg.emit(("sw", CG::T5, CG::SP, Ix(-12)));
-        cg.emit(("sw", CG::T6, CG::SP, Ix(-16)));
-        cg.emit(("sw", CG::T7, CG::SP, Ix(-20)));
-        cg.reset_regs();
         cg.emit(("move", CG::FP, CG::SP));
         cg.emit(("addu", CG::SP, CG::SP, -24));
 
+        cg.reset_regs();
         // Make room on stack for top level variables in the frame (includes saved registers)
         let &frame_size = self.frame_size.get().unwrap();
         cg.emit(("subu", CG::SP, CG::SP, frame_size));
@@ -324,10 +320,6 @@ fn compute_var_offsets(&self, oc: OCtx) {
         }
         cg.emit(Label(&format!("{name}_exit")));
         // Restore temporary registers $t4-$t7 from the stack
-        cg.emit(("lw", "$t7", CG::FP, Ix(-20)));
-        cg.emit(("lw", "$t6", CG::FP, Ix(-16)));
-        cg.emit(("lw", "$t5", CG::FP, Ix(-12)));
-        cg.emit(("lw", "$t4", CG::FP, Ix(-8)));
         cg.emit(("lw", CG::T0, CG::FP, Ix(-4)));
         cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
         cg.emit(("move", CG::SP, CG::FP));

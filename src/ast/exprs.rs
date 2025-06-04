@@ -401,6 +401,7 @@ impl Ast for CallExpr {
         // Hacky thing to get the current instruction pointer, so we
         // can jump to function pointers
         let return_label = cg.next_label();
+        let used = cg.save_used();
         cg.emit(("la", "$31", Label(&return_label)));
         for arg in self.args.iter().rev() {
             arg.codegen(cg);
@@ -413,11 +414,13 @@ impl Ast for CallExpr {
         }
         cg.emit(Label(return_label));
         cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
+        cg.restore_used(used);
         cg.emit_push(CG::V0);
     }
 
     fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
         let return_label = cg.next_label();
+        let used = cg.save_used();
         cg.emit(("la", "$31", Label(&return_label)));
         cg.emit(("sub", CG::SP, CG::SP, 4 * self.args.len() as u32));
         for (ix, arg) in self.args.iter().enumerate() {
@@ -440,6 +443,7 @@ impl Ast for CallExpr {
         }
         cg.emit(Label(return_label));
         cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
+        cg.restore_used(used);
         cg.emit_push(CG::V0);
         None
     }

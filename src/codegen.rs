@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, io::Write, rc::Rc};
+use std::{cell::{RefCell, Cell}, collections::{HashMap, HashSet}, fmt::Display, io::Write, rc::Rc};
 
 use lrpar::Span;
 
@@ -8,7 +8,7 @@ pub struct Codegen<'a> {
     next_label: usize,
     string_table: HashMap<String, String>,
     pub ref_text: &'a str,
-    free_regs: RegList, 
+    reg_list: RegList,
     pub type_cache: TypeCache,
     pub function_stack: Vec<String>
 }
@@ -47,7 +47,7 @@ impl<'a> Codegen<'a> {
             next_label: 0,
             ref_text: text,
             string_table: HashMap::new(),
-            free_regs: Rc::new(RefCell::new(Vec::new())),
+            reg_list: Rc::new(RefCell::new((Vec::new(), HashSet::new()))),
             type_cache: cache,
             function_stack: Vec::new(),
         }
@@ -89,16 +89,48 @@ impl<'a> Codegen<'a> {
     }
 
     pub fn reset_regs(&mut self) {
-        *self.free_regs.borrow_mut() = vec![CG::T4, CG::T5, CG::T6, CG::T7];
+        *self.reg_list.borrow_mut() = (vec![CG::T4, CG::T5, CG::T6, CG::T7], HashSet::new());
     }
 
     pub fn next_free_reg(&mut self) -> Option<AllocatedRegister> {
-        self.free_regs.borrow_mut().pop()
-            .map(|reg| AllocatedRegister {reg, list: Some(self.free_regs.clone())})
+        let deref!((ref mut free, ref mut used)) = self.reg_list.borrow_mut();
+        free.pop()
+            .inspect(|r| { used.insert(r); })
+            .map(|r| AllocatedRegister { reg: r, list: Some(self.reg_list.clone()) })
+    }
+
+    pub fn save_used(&mut self) -> RegList {
+        let mut offset = 0;
+        let regs_used = self.reg_list.borrow_mut().1.iter()
+            .copied()
+            .collect::<Vec<&'static str>>();
+        if !regs_used.is_empty() {
+            for &reg in regs_used.iter() {
+                self.emit(("sw", reg, "$sp", Ix(offset)));
+                offset -= 4;
+            }
+            self.emit(("addi", "$sp", "$sp", offset));
+        }
+        let regs = self.reg_list.clone();
+        self.reg_list = Rc::new(RefCell::new((vec![], HashSet::new())));
+        regs
+    }
+
+    pub fn restore_used(&mut self, orig_list: RegList) {
+        let mut offset = 0;
+        if !orig_list.borrow().1.is_empty() {
+            for reg in orig_list.borrow().1.iter().copied() {
+                offset += 4;
+                self.emit(("lw", reg, CG::SP, Ix(offset)));
+            }
+            self.emit(("addi", CG::SP, CG::SP, offset));
+        }
+        self.reg_list = orig_list;
     }
 }
 
-type RegList = Rc<RefCell<Vec<&'static str>>>;
+// The structure used to track what registers we have allocated
+pub type RegList = Rc<RefCell<(Vec<&'static str>, HashSet<&'static str>)>>;
 
 pub struct AllocatedRegister {
     pub reg: &'static str,
@@ -132,7 +164,9 @@ impl Display for AllocatedRegister {
 impl Drop for AllocatedRegister {
     fn drop(&mut self) {
         if let Some(ref list) = self.list {
-            list.try_borrow_mut().unwrap().push(self.reg);
+            let deref!((ref mut free, ref mut used)) = list.try_borrow_mut().unwrap();
+            free.push(self.reg);
+            used.remove(self.reg);
         }
     }
 }

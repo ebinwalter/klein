@@ -448,7 +448,9 @@ impl Ast for Id {
     }
 
     fn codegen_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
+        println!("codegen_register for {}", self.unparse_to_string(cg.ref_text));
         let Some(reg) = cg.next_free_reg() else {
+            println!("no register for {}", self.unparse_to_string(cg.ref_text));
             self.codegen(cg);
             return None;
         };

@@ -5,8 +5,7 @@ use lrpar::Span;
 use crate::ast::TypeCache;
 pub struct Codegen<'a> {
     output: Box<dyn Write>,
-    next_label: usize,
-    string_table: HashMap<String, String>,
+    next_label: usize, string_table: HashMap<String, String>,
     pub ref_text: &'a str,
     reg_list: RegList,
     pub type_cache: TypeCache,
@@ -89,7 +88,7 @@ impl<'a> Codegen<'a> {
     }
 
     pub fn reset_regs(&mut self) {
-        *self.reg_list.borrow_mut() = (vec![CG::T4, CG::T5, CG::T6, CG::T7], HashSet::new());
+        self.reg_list = Rc::new(RefCell::new((vec![CG::T2, CG::T3, CG::T4, CG::T5, CG::T6, CG::T7], HashSet::new())));
     }
 
     pub fn next_free_reg(&mut self) -> Option<AllocatedRegister> {
@@ -101,9 +100,10 @@ impl<'a> Codegen<'a> {
 
     pub fn save_used(&mut self) -> RegList {
         let mut offset = 0;
-        let regs_used = self.reg_list.borrow_mut().1.iter()
+        let mut regs_used = self.reg_list.borrow_mut().1.iter()
             .copied()
             .collect::<Vec<&'static str>>();
+        regs_used.sort();
         if !regs_used.is_empty() {
             for &reg in regs_used.iter() {
                 self.emit(("sw", reg, "$sp", Ix(offset)));
@@ -112,16 +112,20 @@ impl<'a> Codegen<'a> {
             self.emit(("addi", "$sp", "$sp", offset));
         }
         let regs = self.reg_list.clone();
-        self.reg_list = Rc::new(RefCell::new((vec![], HashSet::new())));
+        self.reset_regs();
         regs
     }
 
     pub fn restore_used(&mut self, orig_list: RegList) {
         let mut offset = 0;
-        if !orig_list.borrow().1.is_empty() {
-            for reg in orig_list.borrow().1.iter().copied() {
+        let mut regs_used = orig_list.borrow_mut().1.iter()
+            .copied()
+            .collect::<Vec<&'static str>>();
+        regs_used.sort();
+        if !regs_used.is_empty() {
+            for reg in regs_used.iter().rev() {
                 offset += 4;
-                self.emit(("lw", reg, CG::SP, Ix(offset)));
+                self.emit(("lw", *reg, CG::SP, Ix(offset)));
             }
             self.emit(("addi", CG::SP, CG::SP, offset));
         }
@@ -262,7 +266,7 @@ impl<T: AsRef<str>, U: Register, V: Register> Emittable for (&str, U, V, Label<T
     }
 }
 
-impl Emittable for (&str, &str) {
+impl<T: Register> Emittable for (&str, T) {
     fn emit(&self) -> String {
         format!("\t{} {}\n", self.0, self.1)
     }

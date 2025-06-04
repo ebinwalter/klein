@@ -297,8 +297,8 @@ impl BinOp for LTExpr {
         (&self.lhs, &self.rhs)
     }
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
-        cg.emit(("slt", CG::T2, CG::T0, CG::T1));
-        cg.emit_push(CG::T2);
+        cg.emit(("slt", CG::T0, CG::T0, CG::T1));
+        cg.emit_push(CG::T0);
     }
 }
 
@@ -315,8 +315,8 @@ impl BinOp for LTEExpr {
     }
     fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
         cg.emit(("addi", CG::T1, CG::T1, 1));
-        cg.emit(("slt", CG::T2, CG::T0, CG::T1));
-        cg.emit_push(CG::T2);
+        cg.emit(("slt", CG::T0, CG::T0, CG::T1));
+        cg.emit_push(CG::T0);
     }
 }
 
@@ -332,8 +332,8 @@ impl BinOp for GTExpr {
         (&self.lhs, &self.rhs)
     }
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
-        cg.emit(("slt", CG::T2, CG::T1, CG::T0));
-        cg.emit_push(CG::T2);
+        cg.emit(("slt", CG::T0, CG::T1, CG::T0));
+        cg.emit_push(CG::T0);
     }
 }
 
@@ -350,8 +350,8 @@ impl BinOp for GTEExpr {
     }
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         cg.emit(("addi", CG::T0, CG::T0, 1));
-        cg.emit(("slt", CG::T2, CG::T1, CG::T0));
-        cg.emit_push(CG::T2);
+        cg.emit(("slt", CG::T0, CG::T1, CG::T0));
+        cg.emit_push(CG::T0);
     }
 }
 
@@ -367,11 +367,9 @@ impl BinOp for EQExpr {
         (&self.lhs, &self.rhs)
     }
     fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
-        cg.emit(("slt", "$t2", CG::T0, CG::T1));
-        cg.emit(("slt", "$t3", CG::T1, CG::T0));
-        cg.emit(("add", "$t2", "$t2", "$t3"));
-        cg.emit(("slti", "$t2", "$t2", 1));
-        cg.emit_push("$t2");
+        cg.emit(("xor", CG::T0, CG::T0, CG::T1));
+        cg.emit(("slti", CG::T0, CG::T0, 1));
+        cg.emit_push(CG::T0);
     }
 }
 
@@ -387,11 +385,8 @@ impl BinOp for NEQExpr {
         (&self.lhs, &self.rhs)
     }
     fn codegen(&self, cg: &mut Codegen, _lhs_ty: &Type) {
-        cg.emit(("slt", "$t2", CG::T0, CG::T1));
-        cg.emit(("slt", "$t3", CG::T1, CG::T0));
-        cg.emit(("add", "$t2", "$t2", "$t3"));
-        cg.emit(("slt", "$t2", CG::ZERO, "$t2"));
-        cg.emit_push("$t2");
+        cg.emit(("xor", CG::T0, CG::T0, CG::T1));
+        cg.emit_push(CG::T0);
     }
     fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
         cg.emit(("xor", &r1, &r1, r2));

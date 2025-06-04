@@ -403,11 +403,19 @@ impl Ast for CallExpr {
         let return_label = cg.next_label();
         let used = cg.save_used();
         cg.emit(("la", "$31", Label(&return_label)));
-        for arg in self.args.iter().rev() {
-            arg.codegen(cg);
+        cg.emit(("sub", CG::SP, CG::SP, 4 * self.args.len() as u32));
+        for (ix, arg) in self.args.iter().enumerate() {
+            if let Some(reg) = arg.codegen_register(cg) {
+                cg.emit(("sw", reg, CG::SP, Ix(4 + 4 * ix as i32)));
+            } else {
+                cg.emit_pop(CG::T0);
+                println!("Crong");
+                println!("{}", arg.unparse_to_string(cg.ref_text));
+                cg.emit(("sw", CG::T0, CG::SP, Ix(4 + 4 * ix as i32)));
+            }
         }
         if let Some(reg) = self.fun.codegen_register(cg) {
-            cg.emit(("jr", reg.str()));
+            cg.emit(("jr", reg));
         } else {
             cg.emit_pop(CG::T0);
             cg.emit(("jr", CG::T0));
@@ -435,6 +443,7 @@ impl Ast for CallExpr {
             cg.emit(("jr", reg.str()));
             cg.emit(Label(&return_label));
             cg.emit(("add", CG::SP, CG::SP, 4 * self.args.len() as u32));
+            cg.restore_used(used);
             cg.emit(("move", &reg, CG::V0));
             return Some(reg)
         } else {
@@ -812,21 +821,21 @@ impl Ast for IndexExpr {
         if let Some(r1) = reg {
             if let Some(r2) = self.index.codegen_register(cg) {
                 cg.emit(("li", CG::T0, ty_size));
-                cg.emit(("mul", CG::T0, CG::T0, &r2));
-                cg.emit(("add", CG::T0, CG::T0, &r1));
+                cg.emit(("mul", CG::T0, CG::T0, r2));
+                cg.emit(("add", CG::T0, CG::T0, r1));
                 cg.emit_push(CG::T0);
             } else {
                 cg.emit(("li", CG::T0, ty_size));
                 cg.emit_pop(CG::T1);
                 cg.emit(("mul", CG::T0, CG::T0, CG::T1));
-                cg.emit(("add", CG::T0, CG::T0, &r1));
+                cg.emit(("add", CG::T0, CG::T0, r1));
                 cg.emit_push(CG::T0);
             }
         } else {
             self.index.codegen(cg);
             cg.emit_pop(CG::T1);
-            cg.emit(("li", CG::T2, ty_size));
-            cg.emit(("mul", CG::T1, CG::T1, CG::T2));
+            cg.emit(("li", CG::T0, ty_size));
+            cg.emit(("mul", CG::T1, CG::T1, CG::T0));
             cg.emit_pop(CG::T0);
             cg.emit(("add", CG::T0, CG::T0, CG::T1));
             cg.emit_push(CG::T0);
@@ -834,10 +843,6 @@ impl Ast for IndexExpr {
     }
 
     fn codegen_lvalue_register(&self, cg: &mut Codegen) -> std::option::Option<AllocatedRegister> {
-        let Some(storage_reg) = cg.next_free_reg() else {
-            self.codegen_lvalue(cg);
-            return None;
-        };
         let ty = cg.type_cache.get(self).unwrap();
         let ty_size = ty.size();
         let reg = if *self.is_ptr.get().unwrap() {
@@ -848,7 +853,7 @@ impl Ast for IndexExpr {
         if let Some(r1) = reg {
             if let Some(r2) = self.index.codegen_register(cg) {
                 cg.emit(("li", CG::T0, ty_size));
-                cg.emit(("mul", CG::T0, CG::T0, &r2));
+                cg.emit(("mul", CG::T0, CG::T0, r2));
                 cg.emit(("add", &r1, CG::T0, &r1));
                 Some(r1)
             } else {
@@ -861,11 +866,12 @@ impl Ast for IndexExpr {
         } else {
             self.index.codegen(cg);
             cg.emit_pop(CG::T1);
-            cg.emit(("li", CG::T2, ty_size));
-            cg.emit(("mul", CG::T1, CG::T1, CG::T2));
+            cg.emit(("li", CG::T0, ty_size));
+            cg.emit(("mul", CG::T1, CG::T1, CG::T0));
             cg.emit_pop(CG::T0);
-            cg.emit(("add", &storage_reg, CG::T0, CG::T1));
-            Some(storage_reg)
+            cg.emit(("add", CG::T0, CG::T0, CG::T1));
+            cg.emit_push(CG::T0);
+            None
         }
     }
 
@@ -878,7 +884,8 @@ impl Ast for IndexExpr {
             _ => todo!()
         };
         if let Some(reg) = self.ptr.codegen_lvalue_register(cg) {
-            cg.emit((load_ins, &reg, &reg, Ix(0)))
+            cg.emit((load_ins, &reg, &reg, Ix(0)));
+            drop(reg);
         } else {
             cg.emit_pop(CG::T0);
             cg.emit((load_ins, CG::T0, CG::T0, Ix(0)));

@@ -51,4 +51,5 @@ fun main() {
   strcat(snupis, usual);
   strcat(snupis, "\n");
   out <- snupis;
+  out <- 5 + (3 + (5 + (7 + 1)));
 }

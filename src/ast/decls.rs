@@ -314,7 +314,6 @@ fn compute_var_offsets(&self, oc: OCtx) {
         // Make room on stack for top level variables in the frame (includes saved registers)
         let &frame_size = self.frame_size.get().unwrap();
         cg.emit(("subu", CG::SP, CG::SP, frame_size));
-        // Save temporary registers $t4-$t7 to the stack
         for item in body.get_list().iter() {
             item.codegen(cg);
         }

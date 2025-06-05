@@ -100,20 +100,25 @@ Id -> Result<Rc<Id>, ()>
   ;
 
 Type -> Result<Type, ()>:
+    NonFunType {$1}
+  | FunType {$1}
+  ;
+
+NonFunType -> Result<Type, ()>:
     'STRUCT' Id { Ok(Type::Struct($2?, OnceCell::new())) }
   | 'VOID' { Ok(Type::Void) }
   | 'PRIM_INT' { Ok(Type::Int) }
   | 'PRIM_BOOL' { Ok(Type::Bool) }
   | 'PRIM_CHAR' { Ok(Type::Char) }
   | 'PRIM_DOUBLE' { Ok(Type::Double) }
-  | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
-  | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
-  | FunType { $1 }
+  | NonFunType '*' { Ok(Type::Reference(Rc::new($1?))) }
+  | NonFunType '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
+  | '(' FunType ')' { $2 }
   ;
 
 FunType -> Result<Type, ()>:
-    'FUN' '(' TypeList ')' { Ok(Type::FunPtr($3?, Rc::new(Type::Void))) }
-  | 'FUN' '(' '(' TypeList ')' FunOutput ')' { Ok(Type::FunPtr($4?, Rc::new($6?))) }
+    'FUN' '(' TypeList ')' FunOutput { Ok(Type::FunPtr($3?, Rc::new($5?))) }
+  | 'FUN' '(' ')' FunOutput { Ok(Type::FunPtr(vec![], Rc::new($4?))) }
   ;
 
 TypeList -> Result<Vec<Type>, ()>:

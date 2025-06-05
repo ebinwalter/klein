@@ -92,6 +92,11 @@ impl Display for Type {
             Self::Array(t, count) => {
                 t.fmt(f).and_then(|_| f.write_str(&format!("[{count}]")))
             },
+            Type::Reference(a@Type::FunPtr(_, _)) => {
+                f.write_str("(")?;
+                a.fmt(f)?;
+                f.write_str(")*")
+            }
             Self::Reference(t) => {
                 t.fmt(f).and_then(|_| f.write_char('*'))
             },
@@ -109,10 +114,8 @@ impl Display for Type {
 
 impl PartialEq for Type {
     fn eq(&self, other: &Self) -> bool {
-        if let Type::Reference(inner) = other {
-            if let Type::Void = **inner {
-                return true;
-            }
+        if let Type::Reference(Type::Void) = other {
+            return true;
         }
         match self {
             Type::Struct(_this_id, this_cell) => {
@@ -128,15 +131,8 @@ impl PartialEq for Type {
             Type::Double => matches!(other, Type::Double),
             Type::Void => matches!(other, Type::Void),
             Type::SelfRef => todo!(),
-            Type::Reference(self_inner) => {
-                if let Type::Void = **self_inner {
-                     true
-                } else if let Type::Reference(other_inner) = other {
-                    self_inner == other_inner
-                } else {
-                    false
-                }
-            },
+            Type::Reference(Type::Void) => true,
+            Type::Reference(t) if let Type::Reference(u) = other && t == u => true,
             _ => false
         }
     }
@@ -155,6 +151,11 @@ impl Ast for Type {
             Type::Char => up.write("char"),
             Type::SelfRef => up.write("self"),
             Type::Void => up.write("void"),
+            Type::Reference(a@Type::FunPtr(_, _)) => {
+                up.write("(");
+                a.unparse(up);
+                up.write(")*");
+            }
             Type::Reference(ty) => {
                 ty.unparse(up);
                 up.write("*");

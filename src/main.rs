@@ -1,4 +1,4 @@
-#![feature(deref_patterns)]
+#![feature(deref_patterns, if_let_guard)]
 use std::{env::args, process::exit};
 
 use codegen::Codegen;

@@ -1,4 +1,4 @@
-use std::{cell::{RefCell, Cell}, collections::{HashMap, HashSet}, fmt::Display, io::Write, rc::Rc};
+use std::{cell::RefCell, collections::{HashMap, HashSet}, fmt::Display, io::Write, rc::Rc};
 
 use lrpar::Span;
 

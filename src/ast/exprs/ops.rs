@@ -1,7 +1,5 @@
-use std::io::BufWriter;
 
 use crate::ast::*;
-use crate::codegen::*;
 
 enum OpType {
     Numeric,

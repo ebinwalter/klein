@@ -2,10 +2,9 @@
 use lrpar::Span;
 use std::io::stdout;
 use std::io::Write;
-use std::ops::Deref;
 use std::ptr;
 use std::rc::Rc;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{DefaultHasher, Hasher};
 use std::collections::HashMap;
 
 use crate::ast::*;

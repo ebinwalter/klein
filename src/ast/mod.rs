@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 use std::fmt::Display;
-use std::io::{stdout, BufWriter};
-use std::hash::Hash;
 use std::rc::Rc;
 use std::fmt::Write;
-use std::cell::{Cell, OnceCell, RefCell};
-use std::borrow::{Borrow, BorrowMut};
+use std::cell::{OnceCell, RefCell};
+use std::borrow::Borrow;
 use crate::symbols::*;
 pub use crate::codegen::*;
 

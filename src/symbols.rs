@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::{RefCell, OnceCell};
-use std::borrow::{Borrow, BorrowMut};
 use std::iter::Iterator;
-use crate::ast::{FunDecl, Type};
+use crate::ast::Type;
 
-use lrpar::Span;
 
 #[derive(Debug)]
 pub enum Symbol {

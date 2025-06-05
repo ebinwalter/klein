@@ -1,6 +1,6 @@
-fun sort(fun comparer(void *, void *) -> int, void *data, int intem_size, int num_items);
+fun sort(fun((void *, void *) -> int) comparer, void *data, int intem_size, int num_items);
 
-fun proxy(fun int_fun(int, int) -> int, int x, int y) -> int {
+fun proxy(fun((int, int) -> int) int_fun, int x, int y) -> int {
   return int_fun(x, y);
 }
 
@@ -14,11 +14,11 @@ fun sub2(int x, int y) -> int {
 
 struct Freeable {
   void *item;
-  fun free(void *);
+  fun(void *) free;
 }
 
 fun free_freeable(struct Freeable *f) {
-  fun freer(void *) = f.free;
+  fun(void *) freer = f.free;
   freer(f.item);
 }
 

@@ -48,14 +48,6 @@ Decl -> Result<BoxDecl, ()>
 VarDecl -> Result<BoxDecl, ()>
   : Type Id ';' { Ok(VarDecl::new($1?, $2?, None))}
   | Type Id '=' Expr ';' { Ok(VarDecl::new($1?, $2?, Some($4?)))}
-  | 'FUN' Id BareTypeArgs FunOutput ';' { 
-    let fun_ty = Type::FunPtr($3?, $4?.into());
-    Ok(VarDecl::new(fun_ty, $2?, None))
-  }
-  | 'FUN' Id BareTypeArgs FunOutput '=' Expr ';' { 
-    let fun_ty = Type::FunPtr($3?, $4?.into());
-    Ok(VarDecl::new(fun_ty, $2?, Some($6?)))
-  }
   ;
 
 StructDecl -> Result<BoxDecl, ()>: 
@@ -73,7 +65,7 @@ FunDecl -> Result<BoxDecl, ()>
   ;
 
 FunOutput -> Result<Type, ()>
-  : 'ARROW' BareType { $2 }
+  : 'ARROW' Type { $2 }
   | { Ok(Type::Void) }
   ;
 
@@ -84,10 +76,6 @@ FunFormals -> Result<Vec<Rc<FormalParam>>, ()>
 
 FormalParam -> Result<Rc<FormalParam>, ()>
   : Type Id { Ok(FormalParam::new($1?, $2?)) }
-  | 'FUN' Id BareTypeArgs FunOutput
-  {
-    Ok(FormalParam::new(Type::FunPtr($3?, $4?.into()), $2?))
-  }
   | 'SELF_PARAM' 
   { 
     let span = $1.map_err(|_| ())?.span();
@@ -120,27 +108,17 @@ Type -> Result<Type, ()>:
   | 'PRIM_DOUBLE' { Ok(Type::Double) }
   | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
   | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
+  | FunType { $1 }
   ;
 
-BareType -> Result<Type, ()>:
-    'STRUCT' Id { Ok(Type::Struct($2?, OnceCell::new())) }
-  | 'PRIM_INT' { Ok(Type::Int) }
-  | 'PRIM_BOOL' { Ok(Type::Bool) }
-  | 'PRIM_CHAR' { Ok(Type::Char) }
-  | 'PRIM_DOUBLE' { Ok(Type::Double) }
-  | Type '*' { Ok(Type::Reference(Rc::new($1?))) }
-  | Type '[' U32Lit ']' { Ok(Type::Array(Rc::new($1?), $3?)) }
-  | 'FUN' BareTypeArgs FunOutput { Ok(Type::FunPtr($2?, Rc::new($3?))) }
+FunType -> Result<Type, ()>:
+    'FUN' '(' TypeList ')' { Ok(Type::FunPtr($3?, Rc::new(Type::Void))) }
+  | 'FUN' '(' '(' TypeList ')' FunOutput ')' { Ok(Type::FunPtr($4?, Rc::new($6?))) }
   ;
 
-BareTypeArgs -> Result<Vec<Type>, ()>:
-    '(' 'VOID' ')' { Ok(vec![]) }
-  | '(' BareTypeList ')' { Ok($2?) }
-  ;
-
-BareTypeList -> Result<Vec<Type>, ()>:
-    BareType  { Ok(vec![$1?]) }
-  | BareTypeList ',' BareType { flatten($1, $3) }
+TypeList -> Result<Vec<Type>, ()>:
+    TypeList ',' Type { flatten($1, $3) }
+  | Type { Ok(vec![$1?]) }
   ;
 
 Stmt -> Result<BoxStmt, ()>

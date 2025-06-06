@@ -80,7 +80,7 @@ impl Display for Type {
         match self {
             Self::Struct(id, _sym) => {
                 let s = format!(
-                    "struct {}", id.symbol().unwrap().string_id()
+                    "{}", id.symbol().unwrap().string_id()
                 );
                 f.write_str(&s)
             },
@@ -142,7 +142,6 @@ impl Ast for Type {
     fn unparse(&self, up: Up) {
         match self {
             Type::Struct(id, _) => {
-                up.write("struct ");
                 id.unparse(up);
             }
             Type::Bool => up.write("bool"),

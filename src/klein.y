@@ -8,8 +8,8 @@
 %right '&'
 %left '+' '-'
 %left '%'
-%left '[' ']'
 %left '*' '/'
+%left '[' ']'
 %left '.'
 
 %expect 1
@@ -35,8 +35,8 @@ DeclOrStmtList -> Result<Vec<DeclOrStmt>, ()>
   ;
 
 DeclOrStmt -> Result<DeclOrStmt, ()>
-  : Decl { Ok(DeclOrStmt::Decl($1?)) }
-  | Stmt { Ok(DeclOrStmt::Stmt($1?)) }
+  : Stmt { Ok(DeclOrStmt::Stmt($1?)) }
+  | Decl { Ok(DeclOrStmt::Decl($1?)) }
   ;
 
 Decl -> Result<BoxDecl, ()>
@@ -76,13 +76,6 @@ FunFormals -> Result<Vec<Rc<FormalParam>>, ()>
 
 FormalParam -> Result<Rc<FormalParam>, ()>
   : Type Id { Ok(FormalParam::new($1?, $2?)) }
-  | 'SELF_PARAM' 
-  { 
-    let span = $1.map_err(|_| ())?.span();
-    let ((line, col), _) = $lexer.line_col(span);
-    let id = Id::new(span, line, col);
-    Ok(FormalParam::new(Type::SelfRef, id.into()))
-  }
   ;
 
 FormalsList -> Result<Vec<Rc<FormalParam>>, ()>

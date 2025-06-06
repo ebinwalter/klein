@@ -288,7 +288,7 @@ impl Ast for InputStmt {
         tc.cache_type(&*self.loc, &loc_type);
         match loc_type {
             Int | Bool | Char  => (),
-            Array(deref!(Type::Char), _) => (),
+            Array(Type::Char, _) => (),
             Reference(t) if matches!(*t, Char) => {
                 tc.raise_error(
                     self.loc.clone(),
@@ -325,7 +325,7 @@ impl Ast for InputStmt {
                 cg.emit_pop(CG::T0);
                 cg.emit(("sb", CG::V0, CG::T0, Ix(0)));
             },
-            Type::Array(deref!(Type::Char), len) => {
+            Type::Array(Type::Char, len) => {
                 self.loc.codegen_lvalue(cg);
                 cg.emit_pop(CG::A0);
                 cg.emit(("li", CG::V0, 8));
@@ -369,8 +369,8 @@ impl Ast for OutputStmt {
         tc.cache_type(&*self.expr, &expr_type);
         match expr_type {
             Int | Bool | Char  => (),
-            Reference(deref!(Type::Char)) => (),
-            Array(deref!(Type::Char), _) => (),
+            Reference(Type::Char) => (),
+            Array(Type::Char, _) => (),
             _ => {
                 tc.raise_error(self.expr.clone(),
                     "Output is only supported for integers, booleans, characters \
@@ -397,7 +397,7 @@ impl Ast for OutputStmt {
                 cg.emit(("li", CG::V0, 11));
                 cg.emit("syscall");
             },
-            Type::Array(deref!(Type::Char), _) => {
+            Type::Array(Type::Char, _) => {
                 if let Some(reg) = self.expr.codegen_lvalue_register(cg) {
                     cg.emit(("move", CG::A0, reg));
                 } else {
@@ -406,7 +406,7 @@ impl Ast for OutputStmt {
                 cg.emit(("li", CG::V0, 4));
                 cg.emit("syscall");
             },
-            Type::Reference(deref!(Type::Char)) => {
+            Type::Reference(Type::Char) => {
                 if let Some(reg) = self.expr.codegen_register(cg) {
                     cg.emit(("move", CG::A0, reg));
                 } else {

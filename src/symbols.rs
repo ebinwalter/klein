@@ -15,10 +15,7 @@ pub enum Symbol {
 impl Symbol {
     pub fn struct_sym(&self) -> Option<Rc<StructDeclSymbol>> {
         match self {
-            Symbol::Var(vs) => {
-                let Type::Struct(_, ref ssym) = *vs.ty else { 
-                    return None 
-                }; 
+            Symbol::Var(VarSymbol { ty: Type::Struct(_, ssym ), .. }) => {
                 return Some(ssym.get()?.clone());
             },
             Symbol::Struct(rc) => Some(rc.clone()),

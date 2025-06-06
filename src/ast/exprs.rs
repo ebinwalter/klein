@@ -366,7 +366,7 @@ impl Ast for CallExpr {
 
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         // Raise an error if this value isn't associated with a function pointer type
-        let Some(Type::FunPtr(fun_args, deref!(ref ret_ty))) = self.fun.typecheck(tc) else {
+        let Some(Type::FunPtr(fun_args, ret_ty)) = self.fun.typecheck(tc) else {
             tc.raise_error(self.fun.clone(), "Attempt to call a non-function".into());
             return None;
         };
@@ -390,7 +390,7 @@ impl Ast for CallExpr {
                 }
             }
         }
-        Some(ret_ty.clone())
+        Some((*ret_ty).clone())
     }
 
     fn code_location(&self) -> Option<(usize, usize)> {
@@ -489,7 +489,7 @@ impl Ast for AccessExpr {
     fn typecheck(&self, tc: TCCtx) -> Option<Type> {
         let obj_ty = self.obj.typecheck(tc)?;
         if let ref x@Type::Struct(_, ref sym) 
-             | ref x@Type::Reference(deref!(Type::Struct(_, ref sym))) 
+             | ref x@Type::Reference(Type::Struct(_, ref sym)) 
              = obj_ty 
         {
             tc.cache_type(&*self.obj, &x);

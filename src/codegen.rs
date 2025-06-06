@@ -92,7 +92,7 @@ impl<'a> Codegen<'a> {
     }
 
     pub fn next_free_reg(&mut self) -> Option<AllocatedRegister> {
-        let deref!((ref mut free, ref mut used)) = self.reg_list.borrow_mut();
+        let (ref mut free, ref mut used) = self.reg_list.borrow_mut();
         free.pop()
             .inspect(|r| { used.insert(r); })
             .map(|r| AllocatedRegister { reg: r, list: Some(self.reg_list.clone()) })
@@ -168,7 +168,7 @@ impl Display for AllocatedRegister {
 impl Drop for AllocatedRegister {
     fn drop(&mut self) {
         if let Some(ref list) = self.list {
-            let deref!((ref mut free, ref mut used)) = list.try_borrow_mut().unwrap();
+            let (ref mut free, ref mut used) = list.try_borrow_mut().unwrap();
             free.push(self.reg);
             used.remove(self.reg);
         }

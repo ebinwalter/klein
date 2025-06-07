@@ -316,14 +316,14 @@ impl Ast for InputStmt {
                 cg.emit(("li", CG::V0, 5));
                 cg.emit("syscall");
                 cg.emit_pop(CG::T0);
-                cg.emit(("sw", CG::V0, CG::T0, Ix(0)));
+                cg.emit(("sw", CG::V0, Ix(0, CG::T0)));
             },
             Type::Char => {
                 self.loc.codegen_lvalue(cg);
                 cg.emit(("li", CG::V0, 12));
                 cg.emit("syscall");
                 cg.emit_pop(CG::T0);
-                cg.emit(("sb", CG::V0, CG::T0, Ix(0)));
+                cg.emit(("sb", CG::V0, Ix(0, CG::T0)));
             },
             Type::Array(Type::Char, len) => {
                 self.loc.codegen_lvalue(cg);
@@ -522,10 +522,10 @@ impl Ast for StoreStmt {
             _ => panic!()
         };
         if let Some(reg) = self.lvalue.codegen_register(cg) {
-            cg.emit((ins, &*self.reg.0, reg, Ix(0)));
+            cg.emit((ins, &*self.reg.0, Ix(0, reg)));
         } else {
             cg.emit_pop(CG::T0);
-            cg.emit((ins, &*self.reg.0, CG::T0, Ix(0)));
+            cg.emit((ins, &*self.reg.0, Ix(0, CG::T0)));
         }
     }
 }

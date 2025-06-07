@@ -278,19 +278,19 @@ impl Ast for AssignExpr {
         };
         if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
             if let Some(val_reg) = self.value.codegen_register(cg) {
-                cg.emit((store_ins, &val_reg, &loc_reg, Ix(0)));
+                cg.emit((store_ins, &val_reg, Ix(0, &loc_reg)));
                 cg.emit_push(&val_reg);
             } else {
                 self.value.codegen(cg);
                 cg.emit_pop(CG::T0);
-                cg.emit((store_ins, CG::T0, &loc_reg, Ix(0)));
+                cg.emit((store_ins, CG::T0, Ix(0, &loc_reg)));
                 cg.emit_push(CG::T0);
             }
         } else {
             self.value.codegen(cg);
             cg.emit_pop(CG::T0);
             cg.emit_pop(CG::T1);
-            cg.emit((store_ins, CG::T0, CG::T1, Ix(0)));
+            cg.emit((store_ins, CG::T0, Ix(0, CG::T1)));
             cg.emit_push(CG::T0);
         }
     }
@@ -307,14 +307,14 @@ impl Ast for AssignExpr {
         };
         if let Some(loc_reg) = self.loc.codegen_lvalue_register(cg) {
             if let Some(val_reg) = self.value.codegen_register(cg) {
-                cg.emit((store_ins, &val_reg, &loc_reg, Ix(0)));
+                cg.emit((store_ins, &val_reg, Ix(0, &loc_reg)));
                 drop(loc_reg);
                 drop(storage_reg);
                 Some(val_reg)
             } else {
                 self.value.codegen(cg);
                 cg.emit_pop(storage_reg.reg);
-                cg.emit((store_ins, &storage_reg, &loc_reg, Ix(0)));
+                cg.emit((store_ins, &storage_reg, Ix(0, &loc_reg)));
                 drop(loc_reg);
                 Some(storage_reg)
             }
@@ -322,7 +322,7 @@ impl Ast for AssignExpr {
             self.value.codegen(cg);
             cg.emit_pop(&storage_reg);
             cg.emit_pop(CG::T1);
-            cg.emit((store_ins, &storage_reg, CG::T1, Ix(0)));
+            cg.emit((store_ins, &storage_reg, Ix(0, CG::T1)));
             Some(storage_reg)
         }
     }
@@ -406,12 +406,12 @@ impl Ast for CallExpr {
         cg.emit(("sub", CG::SP, CG::SP, 4 * self.args.len() as u32));
         for (ix, arg) in self.args.iter().enumerate() {
             if let Some(reg) = arg.codegen_register(cg) {
-                cg.emit(("sw", reg, CG::SP, Ix(4 + 4 * ix as i32)));
+                cg.emit(("sw", reg, Ix(4 + 4 * ix as i32, CG::SP)));
             } else {
                 cg.emit_pop(CG::T0);
                 println!("Crong");
                 println!("{}", arg.unparse_to_string(cg.ref_text));
-                cg.emit(("sw", CG::T0, CG::SP, Ix(4 + 4 * ix as i32)));
+                cg.emit(("sw", CG::T0, Ix(4 + 4 * ix as i32, CG::SP)));
             }
         }
         if let Some(reg) = self.fun.codegen_register(cg) {
@@ -433,10 +433,10 @@ impl Ast for CallExpr {
         cg.emit(("sub", CG::SP, CG::SP, 4 * self.args.len() as u32));
         for (ix, arg) in self.args.iter().enumerate() {
             if let Some(reg) = arg.codegen_register(cg) {
-                cg.emit(("sw", reg, CG::SP, Ix(4 + 4 * ix as i32)));
+                cg.emit(("sw", reg, Ix(4 + 4 * ix as i32, CG::SP)));
             } else {
                 cg.emit_pop(CG::T0);
-                cg.emit(("sw", CG::T0, CG::SP, Ix(4 + 4 * ix as i32)));
+                cg.emit(("sw", CG::T0, Ix(4 + 4 * ix as i32, CG::SP)));
             }
         }
         if let Some(reg) = self.fun.codegen_register(cg) {
@@ -554,7 +554,7 @@ impl Ast for AccessExpr {
         }
         let load_instr = if let Type::Char = *vs.ty { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
-        cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
+        cg.emit((load_instr, CG::T0, Ix(*offset, CG::T0)));
         // --- END CHANGES ---
         cg.emit_push(CG::T0);
     }
@@ -566,19 +566,19 @@ impl Ast for AccessExpr {
         let load_instr = if let Type::Char = *vs.ty { "lb" } else { "lw" };
         if let Some(Type::Reference(_)) = cg.type_cache.get(&*self.obj) {
             if let Some(r) = self.obj.codegen_register(cg) {
-                cg.emit((load_instr, &r, &r, Ix(*offset)));
+                cg.emit((load_instr, &r, Ix(*offset, &r)));
                 return Some(r);
             } else {
                 cg.emit_pop(CG::T0);
             }
         } else if let Some(r) = self.obj.codegen_lvalue_register(cg) {
-            cg.emit((load_instr, &r, &r, Ix(*offset)));
+            cg.emit((load_instr, &r, Ix(*offset, &r)));
             return Some(r)
         } else {
             cg.emit_pop(CG::T0);
         }
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
-        cg.emit((load_instr, CG::T0, CG::T0, Ix(*offset)));
+        cg.emit((load_instr, CG::T0, Ix(*offset, CG::T0)));
         // --- END CHANGES ---
         cg.emit_push(CG::T0);
         None
@@ -713,7 +713,7 @@ impl Ast for DerefExpr {
         // Previously, it always used 'lw', causing issues for 1-byte types.
         let load_instr = if let Type::Char = cg.type_cache.get(self).unwrap() { "lb" } else { "lw" };
         // Updated: Use the dynamic load_instr instead of hardcoded "lw".
-        cg.emit((load_instr, CG::T0, CG::T1, Ix(0)));
+        cg.emit((load_instr, CG::T0, Ix(0, CG::T1)));
         // --- END CHANGES ---
         cg.emit_push(CG::T0);
     }
@@ -884,11 +884,11 @@ impl Ast for IndexExpr {
             _ => todo!()
         };
         if let Some(reg) = self.ptr.codegen_lvalue_register(cg) {
-            cg.emit((load_ins, &reg, &reg, Ix(0)));
+            cg.emit((load_ins, &reg, Ix(0, &reg)));
             drop(reg);
         } else {
             cg.emit_pop(CG::T0);
-            cg.emit((load_ins, CG::T0, CG::T0, Ix(0)));
+            cg.emit((load_ins, CG::T0, Ix(0, CG::T0)));
             cg.emit_push(CG::T0);
         }
     }
@@ -902,11 +902,11 @@ impl Ast for IndexExpr {
             _ => todo!()
         };
         if let Some(reg) = self.codegen_lvalue_register(cg) {
-            cg.emit((load_ins, &reg, &reg, Ix(0)));
+            cg.emit((load_ins, &reg, Ix(0, &reg)));
             Some(reg)
         } else {
             cg.emit_pop(CG::T0);
-            cg.emit((load_ins, CG::T0, CG::T0, Ix(0)));
+            cg.emit((load_ins, CG::T0, Ix(0, CG::T0)));
             cg.emit_push(CG::T0);
             None
         }

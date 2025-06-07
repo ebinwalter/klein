@@ -432,7 +432,8 @@ impl Ast for Id {
                     cg.emit((load_ins, CG::T0, Label(format!("_{}", v.id))));
                 } else {
                     cg.emit(Comment(&format!("Pushing value of local variable {}", v.id)));
-                    cg.emit((load_ins, CG::T0, CG::FP, Ix(*v.offset.get().unwrap())));
+                    let offset = *v.offset.get().unwrap();
+                    cg.emit((load_ins, CG::T0, Ix(offset, CG::FP)));
                 }
                 cg.emit_push(CG::T0);
             },
@@ -465,7 +466,8 @@ impl Ast for Id {
                     cg.emit((load_ins, &reg, Label(format!("_{}", v.id))));
                 } else {
                     cg.emit(Comment(&format!("Loading value of local variable {} into reg {}", v.id, &reg)));
-                    cg.emit((load_ins, &reg, CG::FP, Ix(*v.offset.get().unwrap())));
+                    let offset = *v.offset.get().unwrap();
+                    cg.emit((load_ins, &reg, Ix(offset, CG::FP)));
                 }
                 Some(reg)
             },

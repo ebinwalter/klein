@@ -65,12 +65,12 @@ impl<'a> Codegen<'a> {
     }
 
     pub fn emit_push(&mut self, reg: impl Register) {
-        self.emit(("sw", reg, Self::SP, Ix(0)));
+        self.emit(("sw", reg, Ix(0, Self::SP)));
         self.emit(("addiu", Self::SP, Self::SP, -4));
     }
 
     pub fn emit_pop(&mut self, reg: impl Register) {
-        self.emit(("lw", reg, Self::SP, Ix(4)));
+        self.emit(("lw", reg, Ix(4, Self::SP)));
         self.emit(("addiu", Self::SP, Self::SP, 4));
     }
 
@@ -106,7 +106,7 @@ impl<'a> Codegen<'a> {
         regs_used.sort();
         if !regs_used.is_empty() {
             for &reg in regs_used.iter() {
-                self.emit(("sw", reg, "$sp", Ix(offset)));
+                self.emit(("sw", reg, Ix(offset, "$sp")));
                 offset -= 4;
             }
             self.emit(("addi", "$sp", "$sp", offset));
@@ -125,7 +125,7 @@ impl<'a> Codegen<'a> {
         if !regs_used.is_empty() {
             for reg in regs_used.iter().rev() {
                 offset += 4;
-                self.emit(("lw", *reg, CG::SP, Ix(offset)));
+                self.emit(("lw", *reg, Ix(offset, CG::SP)));
             }
             self.emit(("addi", CG::SP, CG::SP, offset));
         }
@@ -238,9 +238,9 @@ impl<U: Register> Emittable for (&str, U, u32) {
     }
 }
 
-impl<T: Register, U: Register> Emittable for (&str, T, U, Ix) {
+impl<T: Register, U: Register> Emittable for (&str, T, Ix<U>) {
     fn emit(&self) -> String {
-        format!("\t{} {}, {}({})\n", self.0, self.1, self.3.0, self.2.str())
+        format!("\t{} {}, {}\n", self.0, self.1, self.2)
     }
 }
 
@@ -312,4 +312,13 @@ impl Emittable for Directive {
     }
 }
 
-pub struct Ix(pub i32);
+pub struct Ix<T>(pub i32, pub T);
+
+impl<T: Display> Display for Ix<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)?;
+        f.write_str("(")?;
+        self.1.fmt(f)?;
+        f.write_str(")")
+    }
+}

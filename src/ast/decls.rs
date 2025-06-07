@@ -305,8 +305,8 @@ fn compute_var_offsets(&self, oc: OCtx) {
         // Preamble
         cg.emit(Label(&name));
         // Prologue (save old frame pointer, RA, etc.)
-        cg.emit(("sw", CG::RA, CG::SP, Ix(0)));
-        cg.emit(("sw", CG::FP, CG::SP, Ix(-4)));
+        cg.emit(("sw", CG::RA, Ix(0, CG::SP)));
+        cg.emit(("sw", CG::FP, Ix(-4, CG::SP)));
         cg.emit(("move", CG::FP, CG::SP));
         cg.emit(("addu", CG::SP, CG::SP, -24));
 
@@ -319,8 +319,8 @@ fn compute_var_offsets(&self, oc: OCtx) {
         }
         cg.emit(Label(&format!("{name}_exit")));
         // Restore temporary registers $t4-$t7 from the stack
-        cg.emit(("lw", CG::T0, CG::FP, Ix(-4)));
-        cg.emit(("lw", CG::RA, CG::FP, Ix(0)));
+        cg.emit(("lw", CG::T0, Ix(-4, CG::FP)));
+        cg.emit(("lw", CG::RA, Ix(0, CG::FP)));
         cg.emit(("move", CG::SP, CG::FP));
         cg.emit(("move", CG::FP, CG::T0));
         if name != "main" {

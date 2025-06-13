@@ -137,12 +137,6 @@ impl<'a> Codegen<'a> {
     }
 }
 
-impl Drop for Codegen {
-    fn drop(&mut self) {
-        println!("Codegen completed with {} push/pop sequences emitted", self.push_pop_counter);
-    }
-}
-
 // The structure used to track what registers we have allocated
 pub type RegList = Rc<RefCell<(Vec<&'static str>, HashSet<&'static str>)>>;
 
@@ -197,6 +191,7 @@ impl Drop for Codegen<'_> {
             self.emit(emission);
         }
         self.output.flush().unwrap();
+        println!("Codegen completed with {} push/pop sequences emitted", self.push_pop_counter);
     }
 }
 

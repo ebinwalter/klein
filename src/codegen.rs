@@ -9,7 +9,8 @@ pub struct Codegen<'a> {
     pub ref_text: &'a str,
     reg_list: RegList,
     pub type_cache: TypeCache,
-    pub function_stack: Vec<String>
+    pub function_stack: Vec<String>,
+    push_pop_counter: usize,
 }
 
 pub trait Register: std::fmt::Display {
@@ -49,6 +50,7 @@ impl<'a> Codegen<'a> {
             reg_list: Rc::new(RefCell::new((Vec::new(), HashSet::new()))),
             type_cache: cache,
             function_stack: Vec::new(),
+            push_pop_counter: 0
         }
     }
 
@@ -67,11 +69,13 @@ impl<'a> Codegen<'a> {
     pub fn emit_push(&mut self, reg: impl Register) {
         self.emit(("sw", reg, Ix(0, Self::SP)));
         self.emit(("addiu", Self::SP, Self::SP, -4));
+        self.push_pop_counter += 1;
     }
 
     pub fn emit_pop(&mut self, reg: impl Register) {
         self.emit(("lw", reg, Ix(4, Self::SP)));
         self.emit(("addiu", Self::SP, Self::SP, 4));
+        self.push_pop_counter += 1;
     }
 
     pub fn label_for_string(&mut self, string_span: Span) -> String {

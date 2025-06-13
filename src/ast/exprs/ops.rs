@@ -17,14 +17,25 @@ trait BinOp {
         panic!("Unimplemented binary operator {}", Self::SYMBOL)
     }
     fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
-        if r1.reg != CG::T0 {
-            cg.emit(("move", CG::T0, r1));
+        // Use provided registers directly instead of always moving to T0/T1
+        match Self::OP_TYPE {
+            OpType::Numeric => {
+                // Default implementation for numeric ops - can be overridden
+                cg.emit(("add", &r1, &r1, &r2)); // placeholder - should be overridden
+                Some(r1)
+            }
+            _ => {
+                // Fall back to old behavior for complex ops
+                if r1.reg != CG::T0 {
+                    cg.emit(("move", CG::T0, r1));
+                }
+                if r2.reg != CG::T1 {
+                    cg.emit(("move", CG::T1, r2))
+                }
+                self.codegen(cg, lhs_ty);
+                None
+            }
         }
-        if r2.reg != CG::T1 {
-            cg.emit(("move", CG::T1, r2))
-        }
-        self.codegen(cg, lhs_ty);
-        None
     }
 }
 
@@ -206,6 +217,27 @@ impl BinOp for Times {
     fn operands<'a>(&self) -> (&Boxpr, &Boxpr) {
         (&self.0, &self.1)
     }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("mul", CG::T0, CG::T0, CG::T1));
+                cg.emit_push(CG::T0);
+            },
+            Type::Double => {
+                todo!("fp arithmetic");
+            },
+            _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("mul", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
+    }
 }
 
 pub struct Plus(pub Boxpr, pub Boxpr);
@@ -259,6 +291,15 @@ impl BinOp for Minus {
             _ => unreachable!()
         }
     }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("sub", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
+    }
 }
 
 pub struct Divide(pub Boxpr, pub Boxpr);
@@ -269,6 +310,27 @@ impl BinOp for Divide {
     fn operands<'a>(&self) -> (&Boxpr, &Boxpr) {
         (&self.0, &self.1)
     }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("div", CG::T0, CG::T0, CG::T1));
+                cg.emit_push(CG::T0);
+            },
+            Type::Double => {
+                todo!("fp arithmetic");
+            },
+            _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("div", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
+    }
 }
 
 pub struct Mod(pub Boxpr, pub Boxpr);
@@ -278,6 +340,24 @@ impl BinOp for Mod {
     const OP_TYPE: OpType = OpType::Numeric;
     fn operands<'a>(&self) -> (&Boxpr, &Boxpr) {
         (&self.0, &self.1)
+    }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("rem", CG::T0, CG::T0, CG::T1));
+                cg.emit_push(CG::T0);
+            },
+            _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("rem", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
     }
 }
 
@@ -298,6 +378,10 @@ impl BinOp for LTExpr {
         cg.emit(("slt", CG::T0, CG::T0, CG::T1));
         cg.emit_push(CG::T0);
     }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("slt", &r1, &r1, &r2));
+        Some(r1)
+    }
 }
 
 pub struct LTEExpr {
@@ -316,6 +400,11 @@ impl BinOp for LTEExpr {
         cg.emit(("slt", CG::T0, CG::T0, CG::T1));
         cg.emit_push(CG::T0);
     }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("addi", &r2, &r2, 1));
+        cg.emit(("slt", &r1, &r1, &r2));
+        Some(r1)
+    }
 }
 
 pub struct GTExpr {
@@ -332,6 +421,10 @@ impl BinOp for GTExpr {
     fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
         cg.emit(("slt", CG::T0, CG::T1, CG::T0));
         cg.emit_push(CG::T0);
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("slt", &r1, &r2, &r1));
+        Some(r1)
     }
 }
 
@@ -351,6 +444,11 @@ impl BinOp for GTEExpr {
         cg.emit(("slt", CG::T0, CG::T1, CG::T0));
         cg.emit_push(CG::T0);
     }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("addi", &r1, &r1, 1));
+        cg.emit(("slt", &r1, &r2, &r1));
+        Some(r1)
+    }
 }
 
 pub struct EQExpr {
@@ -368,6 +466,11 @@ impl BinOp for EQExpr {
         cg.emit(("xor", CG::T0, CG::T0, CG::T1));
         cg.emit(("slti", CG::T0, CG::T0, 1));
         cg.emit_push(CG::T0);
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, _lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        cg.emit(("xor", &r1, &r1, &r2));
+        cg.emit(("slti", &r1, &r1, 1));
+        Some(r1)
     }
 }
 
@@ -465,6 +568,24 @@ impl BinOp for BitwiseOr {
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
     }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("or", CG::T0, CG::T0, CG::T1));
+                cg.emit_push(CG::T0);
+            },
+            _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("or", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
+    }
 }
 
 pub struct BitwiseAnd {
@@ -473,13 +594,28 @@ pub struct BitwiseAnd {
 }
 
 impl BinOp for BitwiseAnd {
-    // TODO: Introduce 'integral' operator type
-    // For now, just do dumb shit when we try to apply it
-    // to a double
     const OP_TYPE: OpType = OpType::Numeric;
     const SYMBOL: &'static str = "&";
     fn operands(&self) -> (&Boxpr, &Boxpr) {
         (&self.lhs, &self.rhs)
+    }
+    fn codegen(&self, cg: &mut Codegen, lhs_ty: &Type) {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("and", CG::T0, CG::T0, CG::T1));
+                cg.emit_push(CG::T0);
+            },
+            _ => unreachable!()
+        }
+    }
+    fn codegen_reg(&self, cg: &mut Codegen, lhs_ty: &Type, r1: AllocatedRegister, r2: AllocatedRegister) -> Option<AllocatedRegister> {
+        match lhs_ty {
+            Type::Int => {
+                cg.emit(("and", &r1, &r1, &r2));
+                Some(r1)
+            },
+            _ => unimplemented!()
+        }
     }
 }
 
@@ -524,6 +660,34 @@ impl Ast for NegExpr {
 
     fn analyze_names(&self, na: NACtx) {
         self.expr.analyze_names(na);
+    }
+
+    fn typecheck(&self, tc: TCCtx) -> Option<Type> {
+        let expr_ty = self.expr.typecheck(tc);
+        if let Some(ty) = &expr_ty {
+            if !matches!(ty, Type::Int | Type::Double) {
+                tc.raise_error(self.expr.clone(), "Negation can only be applied to numeric types".into());
+            }
+        }
+        expr_ty
+    }
+
+    fn codegen(&self, cg: &mut Codegen) {
+        self.expr.codegen(cg);
+        cg.emit_pop(CG::T0);
+        cg.emit(("sub", CG::T0, CG::ZERO, CG::T0));
+        cg.emit_push(CG::T0);
+    }
+
+    fn codegen_register(&self, cg: &mut Codegen) -> Option<AllocatedRegister> {
+        if let Some(r) = self.expr.codegen_register(cg) {
+            cg.emit(("sub", &r, CG::ZERO, &r));
+            Some(r)
+        } else {
+            cg.emit_pop(CG::T0);
+            cg.emit(("sub", CG::T0, CG::ZERO, CG::T0));
+            Some(AllocatedRegister::new(CG::T0))
+        }
     }
 }
 

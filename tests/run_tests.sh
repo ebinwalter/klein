@@ -1,6 +1,8 @@
 #!/bin/sh
 shopt -s nullglob
 
+pushd $(dirname "$0")
+
 rm -rf test-out
 mkdir test-out
 
@@ -32,3 +34,5 @@ for i in *.kl; do
     fi 
   fi
 done
+
+popd

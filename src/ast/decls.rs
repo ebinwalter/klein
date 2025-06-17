@@ -302,6 +302,9 @@ fn compute_var_offsets(&self, oc: OCtx) {
         };
         cg.function_stack.push(name.clone());
         cg.emit(Directive::Text);
+        if name == "main" {
+            cg.emit(".globl main");
+        }
         // Preamble
         cg.emit(Label(&name));
         // Prologue (save old frame pointer, RA, etc.)

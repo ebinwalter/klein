@@ -15,7 +15,7 @@ Klein is a compiler pet-project for a C-like programming language targeting MIPS
 Klein can be compiled very simply with `cargo build`, having no dependencies not managed by Cargo already.  
 The name of the executable is `kleinc`, and it takes a single source file as an argument.
 
-Klein can also be built into a Docker image, by running `docker build -t klein .` and then `docker run -t klein`, or simply `docker-compose up --build` if you have installed `docker-compose`.
+Klein can also be built into a Docker image, by running `docker build -t klein .` and then `docker run -t klein`, or simply `docker-compose up --build` if you have installed `docker-compose`.  The default entrypoint for the image runs the unit tests.
 
 ### Development
 If you are extending Klein, you may find it helpful to write unit tests.  A small primitive shell script, `tests/run_tests.sh`, is designed to help you do so.

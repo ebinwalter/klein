@@ -6,11 +6,11 @@ RUN cargo build
 RUN pwd
 RUN ls
 
-FROM eclipse-temurin:21-jdk-jammy as deps
+FROM openjdk:11.0.11-jre-slim as mars
 COPY --from=rst /app /app
 COPY tests /app/tests
 
 WORKDIR /app
 RUN chmod +x tests/run_tests.sh
 WORKDIR /app/tests
-RUN /usr/bin/bash run_tests.sh
+ENTRYPOINT ["/bin/bash", "./run_tests.sh"]

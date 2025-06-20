@@ -1,4 +1,3 @@
 /target
 *.s
 /tests/test-out
-/tests/expected

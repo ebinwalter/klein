@@ -11,6 +11,8 @@ if [[ $makerefs -eq 1 ]]; then
   mkdir expected
 fi
 
+passed=1
+
 for i in *.kl; do
   ../target/debug/kleinc $i > /dev/null
   stub="${i%.kl}"
@@ -28,11 +30,14 @@ for i in *.kl; do
     fi
     diff=$(diff -s test-out/$stub.txt expected/$stub.txt)
     if [[ "$diff" =~ .*identical.* ]]; then
-      echo "Passed test"
+      >&2 echo "Passed test"
     else
-      echo "Failed test"
+      >&2 echo "Failed test"
+      passed=0
+      exit 1
     fi 
   fi
 done
 
 popd
+exit $passed
